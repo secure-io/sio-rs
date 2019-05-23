@@ -1,0 +1,10 @@
+[package]
+name = "sio"
+version = "0.1.0"
+authors = ["Andreas Auernhammer <aead@mail.de>"]
+edition = "2018"
+
+description = "Secure IO"
+license = "MIT"
+
+[dependencies]
