@@ -16,23 +16,50 @@ pub const BUF_SIZE: usize = 1 << 14;
 
 /// Wraps a writer and encrypts and authenticates everything written to it.
 ///
+/// `EncrWriter` splits data into fixed-size fragments and encrypts and
+/// authenticates each fragment separately. It appends any remaining data
+/// to its in-memory buffer until it has gathered a complete fragment.
+/// Therefore, using an `std::io::BufWriter` in addition usually does not
+/// improve the performance of write calls. The only exception may be cases
+/// when the buffer size of the `BufWriter` is significantly larger than the
+/// fragment size of the `EncWriter`.
+///
+/// When the `EncWriter` is dropped, any buffered content will be encrypted
+/// as well as authenticated and written out. However, any errors that happen
+/// in the process of flushing the buffer when the `EncWriter` is dropped will
+/// be ignored. Therefore, code should call `flush` explicitly to ensure that
+/// all encrypted data has been written out successfully.
 /// # Examples
 ///
 /// Let's encrypt a string and store the ciphertext in memory:
 ///
 /// ```
-/// use std::io::{Write, Read, copy, repeat};
+/// use std::io::{Write, Read};
 /// use sio::{Key, Nonce, Aad, EncWriter};
-/// use sio::ring;
+/// use sio::ring::AES_256_GCM;
 ///
-/// let key: Key<ring::AES_256_GCM> = Key::new([0; 32]);
-/// let nonce = Nonce::new([0; 8]);
-/// let aad = Aad::empty();
+/// // Load your secret keys from a secure location or derive
+/// // them using a secure (password-based) key-derivation-function, like Argon2id.
+/// // Obviously, don't use this all-zeros key for anything real.
+/// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
 ///
-/// let mut plaintext = repeat('y' as u8).take(5);
-/// let mut ciphertext: Vec<u8> = Vec::default();
+/// // Make sure you use an unique key-nonce combination!
+/// // Reusing a nonce value for the same secret key breaks
+/// // the security of the encryption algorithm.
+/// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+///
+/// // You must be able to re-generate this aad to decrypt
+/// // the ciphertext again. Usually, it's stored together with
+/// // the encrypted data.
+/// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
+///
+/// let mut plaintext = "Some example plaintext".as_bytes();
+///
+/// let mut ciphertext: Vec<u8> = Vec::default();  // Store the ciphertext in memory.
 /// let mut writer = EncWriter::new(ciphertext, &key, nonce, aad);
-/// copy(&mut plaintext, &mut writer).and_then(|_| writer.flush()).unwrap();
+///
+/// writer.write_all(plaintext).unwrap();
+/// writer.flush().unwrap(); // Complete the encryption process explicitly.
 /// ```
 pub struct EncWriter<A: Algorithm, W: Write> {
     inner: W,
@@ -120,6 +147,11 @@ impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
             })?;
         self.buffer.extend_from_slice(chunks.last().unwrap()); // ... there is always a last one.
         Ok(n)
+    }
+
+    #[inline]
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.write(buf).and(Ok(()))
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -231,6 +263,7 @@ impl<A: Algorithm, W: Write> Write for DecWriter<A, W> {
 
 #[cfg(test)]
 mod tests {
+
     use super::ring::AES_256_GCM;
     use super::*;
     use std::io::{Read, Write};
