@@ -16,7 +16,7 @@ pub const BUF_SIZE: usize = 1 << 14;
 
 /// Wraps a writer and encrypts and authenticates everything written to it.
 ///
-/// `EncrWriter` splits data into fixed-size fragments and encrypts and
+/// `EncWriter` splits data into fixed-size fragments and encrypts and
 /// authenticates each fragment separately. It appends any remaining data
 /// to its in-memory buffer until it has gathered a complete fragment.
 /// Therefore, using an `std::io::BufWriter` in addition usually does not
@@ -27,8 +27,9 @@ pub const BUF_SIZE: usize = 1 << 14;
 /// When the `EncWriter` is dropped, any buffered content will be encrypted
 /// as well as authenticated and written out. However, any errors that happen
 /// in the process of flushing the buffer when the `EncWriter` is dropped will
-/// be ignored. Therefore, code should call `flush` explicitly to ensure that
+/// be ignored. Therefore, code should call `close` explicitly to ensure that
 /// all encrypted data has been written out successfully.
+///
 /// # Examples
 ///
 /// Let's encrypt a string and store the ciphertext in memory:
@@ -59,7 +60,7 @@ pub const BUF_SIZE: usize = 1 << 14;
 /// let mut writer = EncWriter::new(ciphertext, &key, nonce, aad);
 ///
 /// writer.write_all(plaintext).unwrap();
-/// writer.flush().unwrap(); // Complete the encryption process explicitly.
+/// writer.close().unwrap(); // Complete the encryption process explicitly.
 /// ```
 pub struct EncWriter<A: Algorithm, W: Write> {
     inner: W,
@@ -68,14 +69,108 @@ pub struct EncWriter<A: Algorithm, W: Write> {
     buf_size: usize,
     nonce: Counter<A>,
     aad: [u8; 16 + 1], // TODO: replace with [u8; A::TAG_LEN + 1]
-    flushed: bool,
+
+    // If an error occurs, we must fail any subsequent write of flush operation.
+    // If set to true, this flag tells the write and flush implementation to fail
+    // immediately.
+    errored: bool,
+
+    // If `close` has been called explicitly, we must not try to close the
+    // EncWriter again. This flag tells the Drop impl if it should skip the
+    // close.
+    closed: bool,
+
+    // If the inner writer panics in a call to write, we don't want to
+    // write the buffered data a second time in BufWriter's destructor. This
+    // flag tells the Drop impl if it should skip the close.
+    panicked: bool,
 }
 
 impl<A: Algorithm, W: Write> EncWriter<A, W> {
+    /// Creates a new `EncWriter` with a default buffer size of 16 KiB.
+    ///
+    /// Anything written to the `EncWriter` gets encrypted and authenticated
+    /// using the provided `key` and `nonce`. The `aad` is only authenticated
+    /// and neither encrypted nor written to the `inner` writer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::{Write, Read};
+    /// use sio::{Key, Nonce, Aad, EncWriter};
+    /// use sio::ring::AES_256_GCM;
+    ///
+    /// // Load your secret keys from a secure location or derive
+    /// // them using a secure (password-based) key-derivation-function, like Argon2id.
+    /// // Obviously, don't use this all-zeros key for anything real.
+    /// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    ///
+    /// // Make sure you use an unique key-nonce combination!
+    /// // Reusing a nonce value for the same secret key breaks
+    /// // the security of the encryption algorithm.
+    /// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+    ///
+    /// // You must be able to re-generate this aad to decrypt
+    /// // the ciphertext again. Usually, it's stored together with
+    /// // the encrypted data.
+    /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
+    //////
+    /// let mut ciphertext: Vec<u8> = Vec::default();  // Store the ciphertext in memory.
+    /// let mut writer = EncWriter::new(ciphertext, &key, nonce, aad);
+    ///
+    /// // Perform some write and flush operations
+    /// // ...
+    ///
+    /// writer.close().unwrap(); // Complete the encryption process explicitly.
+    /// ```
     pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad) -> Self {
         Self::with_buffer_size(inner, key, nonce, aad, BUF_SIZE).unwrap()
     }
 
+    /// Creates a new `EncWriter` with the specified buffer size as fragment
+    /// size. The `buf_size` must not be `0` nor greater than `MAX_BUF_SIZE`.
+    ///
+    /// Anything written to the `EncWriter` gets encrypted and authenticated
+    /// using the provided `key` and `nonce`. The `aad` is only authenticated
+    /// and neither encrypted nor written to the `inner` writer.
+    ///
+    /// It's important to always use the same buffer/fragment size for
+    /// encrypting and decrypting. Trying to decrypt data that has been
+    /// encrypted with a different fragment size will fail. Therefore,
+    /// the buffer size is usually fixed for one (kind of) application.
+    ///
+    /// # Examples
+    ///
+    /// Creating an `EncWriter` with a fragment size of 64 KiB.
+    ///
+    /// ```
+    /// use std::io::{Write, Read};
+    /// use sio::{Key, Nonce, Aad, EncWriter};
+    /// use sio::ring::AES_256_GCM;
+    ///
+    /// // Load your secret keys from a secure location or derive
+    /// // them using a secure (password-based) key-derivation-function, like Argon2id.
+    /// // Obviously, don't use this all-zeros key for anything real.
+    /// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    ///
+    /// // Make sure you use an unique key-nonce combination!
+    /// // Reusing a nonce value for the same secret key breaks
+    /// // the security of the encryption algorithm.
+    /// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+    ///
+    /// // You must be able to re-generate this aad to decrypt
+    /// // the ciphertext again. Usually, it's stored together with
+    /// // the encrypted data.
+    /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
+    //////
+    /// let mut ciphertext: Vec<u8> = Vec::default();  // Store the ciphertext in memory.
+    /// let mut writer = EncWriter::with_buffer_size(ciphertext, &key, nonce, aad, 64 * 1024).unwrap();
+    ///
+    /// // Perform some write and flush operations
+    /// // ...
+    ///
+    /// writer.close().unwrap(); // Complete the encryption process explicitly.
+    /// ```
     pub fn with_buffer_size(
         inner: W,
         key: &Key<A>,
@@ -104,10 +199,36 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
             buf_size: buf_size,
             nonce: nonce,
             aad: associated_data,
-            flushed: false,
+            errored: false,
+            closed: false,
+            panicked: false,
         })
     }
 
+    /// Completes the encryption process, writes the last ciphertext
+    /// fragment to the inner writer and ensures that all buffered
+    /// contents reach their destination.
+    pub fn close(mut self) -> io::Result<()> {
+        self.close_internal()
+    }
+
+    fn close_internal(&mut self) -> io::Result<()> {
+        if self.errored {
+            return Err(io::Error::from(io::ErrorKind::Other));
+        }
+        self.closed = true;
+        self.aad[0] = 0x80; // For the last fragment change the AAD
+
+        self.panicked = true;
+        let r = self.write_buffer().and_then(|()| self.inner.flush());
+        self.panicked = false;
+
+        self.errored = r.is_err();
+        r
+    }
+
+    // Encrypt and authenticate the buffer and write the ciphertext
+    // to the inner writer.
     fn write_buffer(&mut self) -> io::Result<()> {
         self.buffer.resize(self.buffer.len() + A::TAG_LEN, 0);
         let ciphertext = self.algorithm.seal_in_place(
@@ -115,38 +236,47 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
             &self.aad,
             self.buffer.as_mut_slice(),
         )?;
-        self.inner.write_all(ciphertext)?;
+
+        self.panicked = true;
+        let r = self.inner.write_all(ciphertext);
+        self.panicked = false;
+
         self.buffer.clear();
-        Ok(())
+        r
     }
 }
 
 impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if self.flushed {
+        if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        let n = buf.len();
 
-        let remaining = self.buf_size - self.buffer.len();
-        if buf.len() <= remaining {
-            return self.buffer.write_all(buf).and(Ok(n));
-        }
+        let r: io::Result<usize> = {
+            let n = buf.len();
 
-        self.buffer.extend_from_slice(&buf[..remaining]);
-        self.write_buffer()?;
+            let remaining = self.buf_size - self.buffer.len();
+            if buf.len() <= remaining {
+                return self.buffer.write_all(buf).and(Ok(n));
+            }
 
-        let buf = &buf[remaining..];
-        let chunks = buf.chunks(self.buf_size);
-        chunks
-            .clone()
-            .take(chunks.len() - 1) // Since we take only n-1 elements...
-            .try_for_each(|chunk| {
-                self.buffer.extend_from_slice(chunk);
-                self.write_buffer()
-            })?;
-        self.buffer.extend_from_slice(chunks.last().unwrap()); // ... there is always a last one.
-        Ok(n)
+            self.buffer.extend_from_slice(&buf[..remaining]);
+            self.write_buffer()?;
+
+            let buf = &buf[remaining..];
+            let chunks = buf.chunks(self.buf_size);
+            chunks
+                .clone()
+                .take(chunks.len() - 1) // Since we take only n-1 elements...
+                .try_for_each(|chunk| {
+                    self.buffer.extend_from_slice(chunk);
+                    self.write_buffer()
+                })?;
+            self.buffer.extend_from_slice(chunks.last().unwrap()); // ... there is always a last one.
+            Ok(n)
+        };
+        self.errored = r.is_err();
+        r
     }
 
     #[inline]
@@ -155,12 +285,24 @@ impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if self.flushed {
+        if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        self.flushed = true;
-        self.aad[0] = 0x80;
-        self.write_buffer().and_then(|()| self.inner.flush())
+        self.panicked = true;
+        let r = self.inner.flush();
+        self.panicked = false;
+
+        self.errored = r.is_err();
+        r
+    }
+}
+
+impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
+    fn drop(&mut self) {
+        if !self.panicked && !self.closed {
+            // dtors should not panic, so we ignore a failed close
+            let _r = self.close_internal();
+        }
     }
 }
 
@@ -266,7 +408,7 @@ mod tests {
 
     use super::ring::AES_256_GCM;
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::Read;
 
     #[test]
     fn test_it() {
@@ -280,6 +422,6 @@ mod tests {
         let mut ew = EncWriter::with_buffer_size(dw, &key, dec_nonce, Aad::empty(), 100).unwrap();
 
         std::io::copy(&mut std::io::repeat('a' as u8).take(2000), &mut ew).unwrap();
-        ew.flush().unwrap();
+        ew.close().unwrap();
     }
 }
