@@ -1,0 +1,14 @@
+language: rust
+
+rust:
+  - stable
+  - beta
+
+os:
+  - windows
+  - linux
+  - osx
+
+script:
+  - cargo build --verbose --all
+  - cargo test --verbose --all
