@@ -2,13 +2,20 @@ language: rust
 
 rust:
   - stable
-  - beta
 
 os:
   - windows
   - linux
   - osx
 
+branches:
+    only:                                                                                             
+        - master
+
+install:
+  - rustup component add rustfmt
+
 script:
+  - cargo fmt -- --check
   - cargo build --verbose --all
   - cargo test --verbose --all
