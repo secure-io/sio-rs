@@ -3,7 +3,7 @@ use std::io;
 use std::io::Write;
 
 pub use self::aead::{Aad, Algorithm, Key, Nonce};
-pub use self::error::Invalid;
+pub use self::error::{Invalid, NotAuthentic};
 
 mod aead;
 mod error;
