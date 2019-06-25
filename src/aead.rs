@@ -55,26 +55,36 @@ impl<A: Algorithm> AsRef<[u8; 8]> for Nonce<A> {
     }
 }
 
+#[derive(Debug)]
 #[repr(transparent)]
-pub struct Aad<'a>(&'a [u8]);
+pub struct Aad<'a, A: Algorithm>(&'a [u8], PhantomData<A>);
 
-impl<'a> Aad<'a> {
-    #[inline]
-    pub const fn from(aad: &'a [u8]) -> Self {
-        Aad(aad)
-    }
-}
-
-impl Aad<'static> {
+impl<A: Algorithm> Aad<'static, A> {
     #[inline]
     pub fn empty() -> Self {
-        Self::from(&[])
+        Aad(&[], PhantomData)
     }
 }
 
-impl<'a> AsRef<[u8]> for Aad<'a> {
+impl<'a, A: Algorithm> Copy for Aad<'a, A> {}
+
+impl<'a, A: Algorithm> Clone for Aad<'a, A> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, A: Algorithm> AsRef<[u8]> for Aad<'a, A> {
+    #[inline]
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl<'a, A: Algorithm> From<&'a [u8]> for Aad<'a, A> {
+    #[inline]
+    fn from(aad: &'a [u8]) -> Self {
+        Aad(aad, PhantomData)
     }
 }
 

@@ -112,7 +112,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     ///
     /// writer.close().unwrap(); // Complete the encryption process explicitly.
     /// ```
-    pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad) -> Self {
+    pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad<A>) -> Self {
         Self::with_buffer_size(inner, key, nonce, aad, BUF_SIZE).unwrap()
     }
 
@@ -164,7 +164,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
         inner: W,
         key: &Key<A>,
         nonce: Nonce<A>,
-        aad: Aad,
+        aad: Aad<A>,
         buf_size: usize,
     ) -> Result<Self, Invalid> {
         if buf_size == 0 || buf_size > MAX_BUF_SIZE {
@@ -380,7 +380,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     ///
     /// writer.close().unwrap(); // Complete the decryption process explicitly!
     /// ```
-    pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad) -> Self {
+    pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad<A>) -> Self {
         Self::with_buffer_size(inner, key, nonce, aad, BUF_SIZE).unwrap()
     }
 
@@ -431,7 +431,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
         inner: W,
         key: &Key<A>,
         nonce: Nonce<A>,
-        aad: Aad,
+        aad: Aad<A>,
         buf_size: usize,
     ) -> Result<Self, Invalid> {
         if buf_size == 0 || buf_size > MAX_BUF_SIZE {
