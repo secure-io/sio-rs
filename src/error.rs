@@ -1,34 +1,47 @@
-use std::error::Error;
-use std::{fmt, io};
+use std::{error::Error, fmt, io};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// An error indicating that the encrypted data is not authentic - e.g.
+/// malisously modified.
+///
+/// It happens whenever the decryption of some ciphertext fails.
+#[derive(Clone, Copy, PartialEq)]
 pub struct NotAuthentic;
 
 impl NotAuthentic {
     const fn description() -> &'static str {
-        "not authentic"
+        "data is not authentic"
     }
 }
 
 impl Error for NotAuthentic {
+    #[inline]
     fn description(&self) -> &str {
         Self::description()
     }
 }
 
+impl fmt::Debug for NotAuthentic {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", Self::description())
+    }
+}
+
 impl fmt::Display for NotAuthentic {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Self::description())
     }
 }
 
 impl From<NotAuthentic> for io::Error {
+    #[inline]
     fn from(_: NotAuthentic) -> Self {
         io::Error::new(io::ErrorKind::InvalidData, NotAuthentic)
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Exceeded;
 
 impl Exceeded {
@@ -38,18 +51,28 @@ impl Exceeded {
 }
 
 impl Error for Exceeded {
+    #[inline]
     fn description(&self) -> &str {
         Self::description()
     }
 }
 
 impl fmt::Display for Exceeded {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", Self::description())
+    }
+}
+
+impl fmt::Debug for Exceeded {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", Self::description())
     }
 }
 
 impl From<Exceeded> for io::Error {
+    #[inline]
     fn from(_: Exceeded) -> Self {
         io::Error::new(io::ErrorKind::InvalidData, Exceeded)
     }
