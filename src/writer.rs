@@ -54,7 +54,8 @@ use std::io::Write;
 pub struct EncWriter<A: Algorithm, W: Write> {
     inner: W,
     algorithm: A,
-    buffer: Vec<u8>,
+    buffer: Box<[u8]>,
+    pos: usize,
     buf_size: usize,
     nonce: Counter<A>,
     aad: [u8; 16 + 1], // TODO: replace with [u8; A::TAG_LEN + 1]
@@ -153,7 +154,14 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
     ///
     /// let mut ciphertext: Vec<u8> = Vec::default();  // Store the ciphertext in memory.
-    /// let mut writer = EncWriter::with_buffer_size(ciphertext, &key, nonce, aad, 64 * 1024).unwrap();
+    /// let mut writer = EncWriter::with_buffer_size(
+    ///     &mut ciphertext,
+    ///     &key,
+    ///     nonce,
+    ///     aad,
+    ///     64 * 1024,
+    /// )
+    /// .unwrap();
     ////
     /// // Perform some write and flush operations
     /// // ...
@@ -184,7 +192,8 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
         Ok(EncWriter {
             inner: inner,
             algorithm: A::new(key.as_ref()),
-            buffer: Vec::with_capacity(buf_size + A::TAG_LEN),
+            buffer: vec![0; buf_size + A::TAG_LEN].into_boxed_slice(),
+            pos: 0,
             buf_size: buf_size,
             nonce: nonce,
             aad: associated_data,
@@ -196,19 +205,16 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
 
     /// Encrypt and authenticate the buffer and write the ciphertext
     /// to the inner writer.
-    fn write_buffer(&mut self) -> io::Result<()> {
-        self.buffer.resize(self.buffer.len() + A::TAG_LEN, 0);
+    fn write_buffer(&mut self, len: usize) -> io::Result<()> {
         let ciphertext = self.algorithm.seal_in_place(
-            &self.nonce.next()?,
+            self.nonce.next()?,
             &self.aad,
-            self.buffer.as_mut_slice(),
+            &mut self.buffer[..len + A::TAG_LEN],
         )?;
 
         self.panicked = true;
         let r = self.inner.write_all(ciphertext);
         self.panicked = false;
-
-        self.buffer.clear();
         r
     }
 }
@@ -222,13 +228,16 @@ impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
         let r: io::Result<usize> = {
             let n = buf.len();
 
-            let remaining = self.buf_size - self.buffer.len();
+            let remaining = self.buf_size - self.pos;
             if buf.len() <= remaining {
-                return self.buffer.write_all(buf).and(Ok(n));
+                self.buffer[self.pos..self.pos + buf.len()].copy_from_slice(buf);
+                self.pos += buf.len();
+                return Ok(buf.len());
             }
 
-            self.buffer.extend_from_slice(&buf[..remaining]);
-            self.write_buffer()?;
+            self.buffer[self.pos..self.buf_size].copy_from_slice(&buf[..remaining]);
+            self.write_buffer(self.buf_size)?;
+            self.pos = 0;
 
             let buf = &buf[remaining..];
             let chunks = buf.chunks(self.buf_size);
@@ -236,10 +245,12 @@ impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
                 .clone()
                 .take(chunks.len() - 1) // Since we take only n-1 elements...
                 .try_for_each(|chunk| {
-                    self.buffer.extend_from_slice(chunk);
-                    self.write_buffer()
+                    self.buffer[..self.buf_size].copy_from_slice(chunk);
+                    self.write_buffer(self.buf_size)
                 })?;
-            self.buffer.extend_from_slice(chunks.last().unwrap()); // ... there is always a last one.
+            let last = chunks.last().unwrap(); // ... thereis always a last one.
+            self.buffer[..last.len()].copy_from_slice(last); // ... there is always a last one.
+            self.pos = last.len();
             Ok(n)
         };
         self.errored = r.is_err();
@@ -310,21 +321,23 @@ impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
 /// // Use the same associated data (AAD) that was used during encryption.
 /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
 ///
-/// // The ciphertext as raw byte array.
-/// let ciphertext = [15, 69, 209, 72, 77, 11, 165, 233, 108, 135, 157, 217,
-///                       175, 75, 229, 217, 210, 88, 148, 173, 187, 7, 208, 154,
-///                       222, 83, 56, 20, 179, 84, 114, 2, 192, 94, 54, 239, 221, 130];
-///
 /// let mut plaintext: Vec<u8> = Vec::default();  // Store the plaintext in memory.
-/// let mut writer = DecWriter::new(plaintext, &key, nonce, aad);
+/// let mut writer = DecWriter::new(&mut plaintext, &key, nonce, aad);
 ///
-/// writer.write_all(&ciphertext).unwrap();
+/// // Passing the ciphertext as raw bytes.
+/// writer.write(&[14, 95, 207, 89, 77, 7, 174, 168, 96, 128, 148, 207, 224,
+///                86, 236, 153 ,177, 220, 133, 123, 145, 175, 149, 241, 197,
+///                153, 28, 234, 143, 173, 101,243,33]).unwrap();
+///
 /// writer.close().unwrap(); // Complete the decryption process explicitly!
+///
+/// println!("{}", String::from_utf8_lossy(plaintext.as_slice())); // Let's print the plaintext.
 /// ```
 pub struct DecWriter<A: Algorithm, W: Write> {
     inner: W,
     algorithm: A,
-    buffer: Vec<u8>,
+    buffer: Box<[u8]>,
+    pos: usize,
     buf_size: usize,
     nonce: Counter<A>,
     aad: [u8; 16 + 1], // TODO: replace with [u8; A::TAG_LEN + 1]
@@ -371,14 +384,18 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
     ///
     /// let mut plaintext: Vec<u8> = Vec::default();  // Store the plaintext in memory.
-    /// let mut writer = DecWriter::new(plaintext, &key, nonce, aad);
+    /// let mut writer = DecWriter::new(&mut plaintext, &key, nonce, aad);
     ///
     /// // Perform some write and flush operations
     /// // ...
     /// // For example:
-    /// writer.write(&[8, 222, 251, 80, 228, 234, 187, 138, 86, 169, 86, 122, 170, 158, 168, 18]).unwrap();
+    /// writer.write(&[14, 95, 207, 89, 77, 7, 174, 168, 96, 128, 148, 207, 224,
+    ///                86, 236, 153 ,177, 220, 133, 123, 145, 175, 149, 241, 197,
+    ///                153, 28, 234, 143, 173, 101,243,33]).unwrap();
     ///
     /// writer.close().unwrap(); // Complete the decryption process explicitly!
+    ///
+    /// println!("{}", String::from_utf8_lossy(plaintext.as_slice())); // Let's print the plaintext.
     /// ```
     pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad<A>) -> Self {
         Self::with_buffer_size(inner, key, nonce, aad, BUF_SIZE).unwrap()
@@ -418,14 +435,25 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
     ///
     /// let mut plaintext: Vec<u8> = Vec::default();  // Store the plaintext in memory.
-    /// let mut writer = DecWriter::with_buffer_size(plaintext, &key, nonce, aad, 64 * 1024).unwrap();
+    /// let mut writer = DecWriter::with_buffer_size(
+    ///     &mut plaintext,
+    ///     &key,
+    ///     nonce,
+    ///     aad,
+    ///     64 * 1024,
+    /// )
+    /// .unwrap();
     ///
     /// // Perform some write and flush operations
     /// // ...
     /// // For example:
-    /// writer.write(&[8, 222, 251, 80, 228, 234, 187, 138, 86, 169, 86, 122, 170, 158, 168, 18]).unwrap();
+    /// writer.write(&[14, 95, 207, 89, 77, 7, 174, 168, 96, 128, 148, 207, 224,
+    ///                86, 236, 153 ,177, 220, 133, 123, 145, 175, 149, 241, 197,
+    ///                153, 28, 234, 143, 173, 101,243,33]).unwrap();
     ///
-    /// writer.close().unwrap(); // Complete the encryption process explicitly!
+    /// writer.close().unwrap(); // Complete the decryption process explicitly!
+    ///
+    /// println!("{}", String::from_utf8_lossy(plaintext.as_slice())); // Let's print the plaintext.
     /// ```
     pub fn with_buffer_size(
         inner: W,
@@ -451,7 +479,8 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
         Ok(DecWriter {
             inner: inner,
             algorithm: A::new(key.as_ref()),
-            buffer: Vec::with_capacity(buf_size + A::TAG_LEN),
+            buffer: vec![0; buf_size + A::TAG_LEN].into_boxed_slice(),
+            pos: 0,
             buf_size: buf_size,
             nonce: nonce,
             aad: associated_data,
@@ -463,18 +492,14 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
 
     /// Decrypt and verifies the buffer and write the plaintext
     /// to the inner writer.
-    fn write_buffer(&mut self) -> io::Result<()> {
-        let plaintext = self.algorithm.open_in_place(
-            &self.nonce.next()?,
-            &self.aad,
-            self.buffer.as_mut_slice(),
-        )?;
+    fn write_buffer(&mut self, len: usize) -> io::Result<()> {
+        let plaintext =
+            self.algorithm
+                .open_in_place(self.nonce.next()?, &self.aad, &mut self.buffer[..len])?;
 
         self.panicked = true;
         let r = self.inner.write_all(plaintext);
         self.panicked = false;
-
-        self.buffer.clear();
         r
     }
 }
@@ -487,13 +512,16 @@ impl<A: Algorithm, W: Write> Write for DecWriter<A, W> {
         let r: io::Result<usize> = {
             let n = buf.len();
 
-            let remaining = self.buf_size + A::TAG_LEN - self.buffer.len();
+            let remaining = self.buf_size + A::TAG_LEN - self.pos;
             if buf.len() <= remaining {
-                return self.buffer.write_all(buf).and(Ok(n));
+                self.buffer[self.pos..self.pos + buf.len()].copy_from_slice(buf);
+                self.pos += buf.len();
+                return Ok(n);
             }
 
-            self.buffer.extend_from_slice(&buf[..remaining]);
-            self.write_buffer()?;
+            self.buffer[self.pos..].copy_from_slice(&buf[..remaining]);
+            self.write_buffer(self.buf_size + A::TAG_LEN)?;
+            self.pos = 0;
 
             let buf = &buf[remaining..];
             let chunks = buf.chunks(self.buf_size + A::TAG_LEN);
@@ -501,10 +529,12 @@ impl<A: Algorithm, W: Write> Write for DecWriter<A, W> {
                 .clone()
                 .take(chunks.len() - 1) // Since we take only n-1 elements...
                 .try_for_each(|chunk| {
-                    self.buffer.extend_from_slice(chunk);
-                    self.write_buffer()
+                    self.buffer.copy_from_slice(chunk);
+                    self.write_buffer(self.buf_size + A::TAG_LEN)
                 })?;
-            self.buffer.extend_from_slice(chunks.last().unwrap()); // ... there is always a last one.
+            let last = chunks.last().unwrap(); // ... there is always a last one.
+            self.buffer[..last.len()].copy_from_slice(last);
+            self.pos = last.len();
             Ok(n)
         };
 
@@ -575,7 +605,8 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
         self.closed = true;
         self.aad[0] = 0x80; // For the last fragment change the AAD
 
-        self.write_buffer().and_then(|()| self.inner.flush())
+        self.write_buffer(self.pos)
+            .and_then(|()| self.inner.flush())
     }
 }
 
@@ -609,7 +640,8 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
         }
         self.closed = true;
         self.aad[0] = 0x80; // For the last fragment change the AAD
-        self.write_buffer().and_then(|()| self.inner.flush())
+        self.write_buffer(self.pos)
+            .and_then(|()| self.inner.flush())
     }
 }
 
