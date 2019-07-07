@@ -1,4 +1,4 @@
-use super::error::{Exceeded, Invalid, NotAuthentic};
+use crate::error::{Exceeded, Invalid, NotAuthentic};
 use std::marker::PhantomData;
 
 pub trait Algorithm {
@@ -89,27 +89,36 @@ impl<'a, A: Algorithm> From<&'a [u8]> for Aad<'a, A> {
 }
 
 pub(crate) struct Counter<A: Algorithm> {
-    nonce: [u8; 8],
-    seq_num: u32,
+    nonce: [u8; 12],
+    pub seq_num: u32,
+    exceeded: bool,
     phantom_data: PhantomData<A>,
 }
 
 impl<A: Algorithm> Counter<A> {
     pub fn zero(nonce: Nonce<A>) -> Self {
+        let mut value = [0; 12];
+        &mut value[..8].copy_from_slice(&nonce.0);
         Counter {
-            nonce: nonce.0,
+            nonce: value,
             seq_num: 0,
+            exceeded: false,
             phantom_data: PhantomData,
         }
     }
 
-    pub fn next(&mut self) -> Result<[u8; 12], Exceeded> {
-        let seq_num = self.seq_num.checked_add(1).ok_or(Exceeded)?;
+    #[inline]
+    pub fn next<'a>(&'a mut self) -> Result<&'a [u8; 12], Exceeded> {
+        if self.exceeded {
+            return Err(Exceeded);
+        }
 
-        let mut nonce = [0; 12];
-        &nonce[..8].copy_from_slice(self.nonce.as_ref());
-        nonce[8..].copy_from_slice(self.seq_num.to_le_bytes().as_ref());
-        self.seq_num = seq_num;
-        Ok(nonce)
+        self.nonce[8..].copy_from_slice(self.seq_num.to_le_bytes().as_ref());
+        if let Some(seq_num) = self.seq_num.checked_add(1) {
+            self.seq_num = seq_num;
+        } else {
+            self.exceeded = true;
+        }
+        Ok(&self.nonce)
     }
 }
