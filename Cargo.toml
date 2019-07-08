@@ -8,7 +8,17 @@ description = "Secure IO"
 license = "MIT"
 
 [features]
-default = ["ring"]
+default = ["ring", "must_close"]
+
+# The 'must_close' feature ensures that an EncWriter
+# or DecWriter is actually closed by an explicit
+# invocation of the 'close()' method. If an EncWriter
+# or DecWriter gets dropped without being closed
+# explicitly, its destructor will panic at runtime.
+#
+# This feature is enabled by default. Disabling it
+# only affects debug builds.
+must_close = []
 
 [dependencies]
 ring = { version = "0.14.6", optional = true }

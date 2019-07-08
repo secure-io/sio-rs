@@ -277,9 +277,30 @@ impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
 
 impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
     fn drop(&mut self) {
-        if !self.panicked && !self.closed {
-            // dtors should not panic, so we ignore a failed close
-            let _r = self.close_internal();
+        // We must not check whether the EncWriter has been closed if:
+        //  - a inner write or flush call panic'd.
+        //  - we encountered an error during a write or flush call.
+        if !self.panicked && !self.errored {
+            // For debugging purposes, we allow disabling the panic
+            // for debug builds - but only if the feature "must_close"
+            // (enabled by default) is turned off.
+            if !(cfg!(debug_assertions) && !cfg!(feature = "must_close")) {
+                // Actually, Drop implementations should not panic.
+                // However, not closing the EncWriter (see: close())
+                // implies not encrypting the entire plaintext such that
+                // the ciphertext written to the inner writer cannot be
+                // decrypted anymore. Consequently, we would "loose" data.
+                //
+                // We could call close() here if it hasn't been called explicitly
+                // by callers but that would only succeed if the no other I/O error
+                // occurs. Otherwise, we are in the same situation as before. Calling
+                // close() here would an optimistic approach - while in cryptography
+                // we have to be pessimistic.
+                assert!(
+                    self.closed,
+                    "EncWriter must be closed explicitly via the close method before being dropped!"
+                );
+            }
         }
     }
 }
@@ -562,9 +583,32 @@ impl<A: Algorithm, W: Write> Write for DecWriter<A, W> {
 
 impl<A: Algorithm, W: Write> Drop for DecWriter<A, W> {
     fn drop(&mut self) {
-        if !self.panicked && !self.closed {
-            // dtors should not panic, so we ignore a failed close
-            let _r = self.close_internal();
+        // We must not check whether the DecWriter has been closed if:
+        //  - a inner write or flush call panic'd.
+        //  - we encountered an error during a write or flush call.
+        if !self.panicked && !self.errored {
+            // For debugging purposes,we allow disabling the panic
+            // for debug builds - but only if the feature "must_close"
+            // (enabled by default) is turned off.
+            if !(cfg!(debug_assertions) && !cfg!(feature = "must_close")) {
+                // Actually, Drop implementations should not panic.
+                // However, not closing the DecWriter (see: close())
+                // implies not decrypting the entire ciphertext and
+                // also not writing the entire plaintext to the inner
+                // writer. Consequently, not calling close causes not
+                // authentic (b/c incomplete) plaintext output.
+                //
+                // We could call close() here if it hasn't been called explicitly
+                // by callers but that would only succeed if the ciphertext
+                // is authentic and no other I/O error occurs. Otherwise, we
+                // are in the same situation as before. Calling close() here
+                // would an optimistic approach - while in cryptography we have
+                // to be pessimistic.
+                assert!(
+                    self.closed,
+                    "DecWriter must be closed explicitly via the close method before being dropped!"
+                );
+            }
         }
     }
 }
@@ -613,6 +657,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
 impl<A: Algorithm, W: Write> private::Private for EncWriter<A, W> {}
 
 impl<A: Algorithm, W: Write> Close for EncWriter<A, W> {
+    #[must_use = "An EncWriter must be closed to successfully complete the encryption process. Ignoring this result may cause incomplete ciphertext data."]
     fn close(mut self) -> io::Result<()> {
         self.close_internal()
     }
@@ -625,6 +670,7 @@ impl<A1: Algorithm, A2: Algorithm, W: Write> EncWriter<A1, DecWriter<A2, W>> {
     ///
     /// If the encryption completes successfully then it also closes
     /// the inner `DecWriter` to complete the inner decryption.
+    #[must_use = "An EncWriter must be closed to successfully complete the encryption process. Ignoring this result may cause incomplete ciphertext data."]
     pub fn close(mut self) -> io::Result<()> {
         self.close_internal()
             .and_then(|()| self.inner.close_internal())
@@ -648,6 +694,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
 impl<A: Algorithm, W: Write> private::Private for DecWriter<A, W> {}
 
 impl<A: Algorithm, W: Write> Close for DecWriter<A, W> {
+    #[must_use = "A DecWriter must be closed to successfully complete the decryption process. Ignoring this result may cause incomplete plaintext data."]
     fn close(mut self) -> io::Result<()> {
         self.close_internal()
     }
@@ -660,6 +707,7 @@ impl<A1: Algorithm, A2: Algorithm, W: Write> DecWriter<A1, EncWriter<A2, W>> {
     ///
     /// If the decryption completes successfully then it also closes
     /// the inner `EncWriter` to complete the inner encryption.
+    #[must_use = "A DecWriter must be closed to successfully complete the decryption process. Ignoring this result may cause incomplete plaintext data."]
     pub fn close(mut self) -> io::Result<()> {
         self.close_internal()
             .and_then(|()| self.inner.close_internal())
