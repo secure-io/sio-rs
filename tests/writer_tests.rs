@@ -1,9 +1,9 @@
 use sio::ring::AES_256_GCM;
 use sio::*;
-use std::io::Write;
+use std::{io, io::Write};
 
 #[test]
-fn write() {
+fn write() -> io::Result<()> {
     let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
 
     let data = [0; 1 << 20];
@@ -20,8 +20,7 @@ fn write() {
     writer
         .write_all(&data[..half])
         .and_then(|()| writer.write_all(&data[half..]))
-        .and_then(|()| writer.close())
-        .expect("The encryption failed");
+        .and_then(|()| writer.close())?;
 
     let mut writer = DecWriter::new(
         &mut plaintext,
@@ -33,14 +32,14 @@ fn write() {
     writer
         .write_all(&ciphertext.as_slice()[..half])
         .and_then(|()| writer.write_all(&ciphertext.as_slice()[half..]))
-        .and_then(|()| writer.close())
-        .expect("The decryption failed");
+        .and_then(|()| writer.close())?;
 
     assert_eq!(data.as_ref(), plaintext.as_slice());
+    Ok(())
 }
 
 #[test]
-fn write_empty() {
+fn write_empty() -> io::Result<()> {
     let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
 
     let data = [0; 0];
@@ -57,7 +56,6 @@ fn write_empty() {
     .expect("The encryption failed");
 
     assert_eq!(ciphertext.len(), AES_256_GCM::TAG_LEN);
-
     let mut writer = DecWriter::new(
         &mut plaintext,
         &key,
@@ -66,14 +64,14 @@ fn write_empty() {
     );
     writer
         .write_all(ciphertext.as_slice())
-        .and_then(|()| writer.close())
-        .expect("The decryption failed");
+        .and_then(|_| writer.close())?;
 
     assert_eq!(data.as_ref(), plaintext.as_slice());
+    Ok(())
 }
 
 #[test]
-fn close() {
+fn close() -> io::Result<()> {
     let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
 
     let data = [0; 1 << 20];
@@ -90,10 +88,8 @@ fn close() {
         Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
         Aad::empty(),
     );
-    writer
-        .write_all(&data)
-        .and_then(|()| writer.close())
-        .expect("The en/decryption failed");
+    writer.write_all(&data).and_then(|_| writer.close())?;
 
     assert_eq!(data.as_ref(), plaintext.as_slice());
+    Ok(())
 }
