@@ -5,7 +5,7 @@ task:
           image: rust:latest
        rustfmt_script: rustup component add rustfmt cargo fmt -- --check
       
-      - name Linix (nightly)
+      - name: Linux (nightly)
         container:
         image: rustlang/rust:nightly
         
