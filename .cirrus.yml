@@ -12,8 +12,9 @@ task:
           image: mojave-base
        matrix:
           - name: macOS
-            install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable && source $HOME/.cargo/env
-     
+            install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable 
+            configure_script: source $HOME/.cargo/env
+          
   cargo_cache:
      folder: $CARGO_HOME/registry
   check_script: rustup component add rustfmt && cargo fmt -- --check   
