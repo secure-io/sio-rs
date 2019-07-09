@@ -1,16 +1,12 @@
 task:
   matrix:
-     - name: Linux
+     - name: linux
        container:
           image: rust:latest
        rustfmt_script: rustup component add rustfmt cargo fmt -- --check
       
-      - name: Linux_(nightly)
-        container:
-           image: rustlang/rust:nightly
-        
   cargo_cache:
-    folder: $CARGO_HOME/registry
+     folder: $CARGO_HOME/registry
   build_script: cargo build --verbose --all
   test_script: cargo test --verbose --all
   before_cache_script: rm -rf $CARGO_HOME/registry/index
