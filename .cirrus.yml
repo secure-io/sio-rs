@@ -3,15 +3,19 @@ task:
      - name: linux
        container:
           image: rust:latest
-       rustfmt_script: rustup component add rustfmt && cargo fmt -- --check
-       
+          
      - name: linux(nightly)
        container:
           image: rustlang/rust:nightly
-       bench_build_script: cargo bench --verbose --no-run
-      
+     
+     - name osx
+       osx_instance:
+          image: mojave-base
+       install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+     
   cargo_cache:
      folder: $CARGO_HOME/registry
+  check_script: rustup component add rustfmt && cargo fmt -- --check   
   build_script: cargo build --verbose --all
   test_script: cargo test --verbose --all
   before_cache_script: rm -rf $CARGO_HOME/registry/index
