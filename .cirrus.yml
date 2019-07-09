@@ -5,14 +5,12 @@ task:
           image: rust:latest
        fmt_script: rustup component add rustfmt && cargo fmt -- --check
        build_script: cargo build --verbose --all
-       test_script: cargo test --verbose --all
           
      - name: linux(nightly)
        container:
           image: rustlang/rust:nightly
        fmt_script: rustup component add rustfmt && cargo fmt -- --check
        build_script: cargo build --verbose --all
-       test_script: cargo test --verbose --all
        bench_script: cargo bench --verbose --all --no-run
      
      - osx_instance:
@@ -24,8 +22,8 @@ task:
             install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable 
             fmt_script: rustup component add rustfmt && cargo fmt -- --check
             build_script: cargo build --verbose --all
-            test_script: cargo test --verbose --all
   
   cargo_cache:
-     folder: $CARGO_HOME/registry   
+     folder: $CARGO_HOME/registry
+  test_script: cargo test --verbose --all
   before_cache_script: rm -rf $CARGO_HOME/registry/index
