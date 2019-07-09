@@ -1,9 +1,19 @@
-container:
-  image: rust:latest
-
-test_task:
+task:
+  matrix:
+     - name: linux
+       container:
+          image: rust:latest
+       fmt_script: rustup component add rustfmt && cargo fmt -- --check
+       build_script: cargo build --verbose --all
+          
+     - name: linux (nightly)
+       container:
+          image: rustlang/rust:nightly
+       fmt_script: rustup component add rustfmt && cargo fmt -- --check
+       build_script: cargo build --verbose --all
+       bench_script: cargo bench --verbose --all --no-run
+     
   cargo_cache:
-    folder: $CARGO_HOME/registry
-  build_script: cargo build
-  test_script: cargo test
+     folder: $CARGO_HOME/registry
+  test_script: cargo test --verbose --all
   before_cache_script: rm -rf $CARGO_HOME/registry/index
