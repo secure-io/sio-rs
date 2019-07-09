@@ -19,7 +19,8 @@ task:
           PATH: $PATH:$CARGO_HOME/bin
        matrix:
           - name: macOS
-            install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable 
+            container:
+               image: rust:latest
             fmt_script: rustup component add rustfmt && cargo fmt -- --check
             build_script: cargo build --verbose --all
   
