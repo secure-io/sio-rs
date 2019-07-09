@@ -12,7 +12,7 @@ task:
           image: mojave-base
        env:
           PATH: $PATH:$CARGO_HOME/bin
-       matrix osx
+       matrix:
           - name: macOS
             install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
      
