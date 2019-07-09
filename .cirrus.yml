@@ -1,5 +1,4 @@
 task:
-- name: Test
   matrix:
      - name: linux
        container:
