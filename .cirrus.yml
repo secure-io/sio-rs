@@ -13,16 +13,6 @@ task:
        build_script: cargo build --verbose --all
        bench_script: cargo bench --verbose --all --no-run
      
-     - osx_instance:
-          image: mojave-base
-       env:
-          PATH: $PATH:$CARGO_HOME/bin
-       matrix:
-        - name: macOS
-          install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable && source $HOME/.cargo/env && rustup component add rustfmt
-          fmt_script: cargo fmt -- --check
-          build_script: cargo build --verbose --all
-  
   cargo_cache:
      folder: $CARGO_HOME/registry
   test_script: cargo test --verbose --all
