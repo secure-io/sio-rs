@@ -3,17 +3,17 @@ task:
      - name: linux
        container:
           image: rust:latest
-          check_script: rustup component add rustfmt && cargo fmt -- --check
-          build_script: cargo build --verbose --all
-          test_script: cargo test --verbose --all
+       check_script: rustup component add rustfmt && cargo fmt -- --check
+       build_script: cargo build --verbose --all
+       test_script: cargo test --verbose --all
           
      - name: linux(nightly)
        container:
           image: rustlang/rust:nightly
-          check_script: rustup component add rustfmt && cargo fmt -- --check
-          build_script: cargo build --verbose --all
-          test_script: cargo test --verbose --all
-          bench_script: cargo bench --verbose --all --no-run
+       check_script: rustup component add rustfmt && cargo fmt -- --check
+       build_script: cargo build --verbose --all
+       test_script: cargo test --verbose --all
+       bench_script: cargo bench --verbose --all --no-run
      
      - osx_instance:
           image: mojave-base
