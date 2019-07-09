@@ -8,10 +8,13 @@ task:
        container:
           image: rustlang/rust:nightly
      
-     - name osx
-       osx_instance:
+     - osx_instance:
           image: mojave-base
-       install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+       env:
+          PATH: $PATH:$CARGO_HOME/bin
+       matrix osx
+          - name: macOS
+            install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
      
   cargo_cache:
      folder: $CARGO_HOME/registry
