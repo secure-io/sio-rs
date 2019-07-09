@@ -4,6 +4,11 @@ task:
        container:
           image: rust:latest
        rustfmt_script: rustup component add rustfmt && cargo fmt -- --check
+       
+     - name: linux(nightly)
+       container:
+          image: rustlang/rust:nightly
+       bench_build_script: cargo bench --verbose --no-run
       
   cargo_cache:
      folder: $CARGO_HOME/registry
