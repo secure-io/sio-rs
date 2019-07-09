@@ -3,24 +3,26 @@ task:
      - name: linux
        container:
           image: rust:latest
-       check_script: rustup component add rustfmt && cargo fmt -- --check
+       fmt_script: rustup component add rustfmt && cargo fmt -- --check
        build_script: cargo build --verbose --all
        test_script: cargo test --verbose --all
           
      - name: linux(nightly)
        container:
           image: rustlang/rust:nightly
-       check_script: rustup component add rustfmt && cargo fmt -- --check
+       fmt_script: rustup component add rustfmt && cargo fmt -- --check
        build_script: cargo build --verbose --all
        test_script: cargo test --verbose --all
        bench_script: cargo bench --verbose --all --no-run
      
      - osx_instance:
           image: mojave-base
+       env:
+          PATH: $PATH:$CARGO_HOME/bin
        matrix:
           - name: macOS
             install_rust_script: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable 
-            configure_script: source $HOME/.cargo/env
+            fmt_script: rustup component add rustfmt && cargo fmt -- --check
             build_script: cargo build --verbose --all
             test_script: cargo test --verbose --all
   
