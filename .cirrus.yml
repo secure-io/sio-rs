@@ -3,7 +3,7 @@ task:
      - name: linux
        container:
           image: rust:latest
-       rustfmt_script: rustup component add rustfmt cargo fmt -- --check
+       rustfmt_script: rustup component add rustfmt && cargo fmt -- --check
       
   cargo_cache:
      folder: $CARGO_HOME/registry
