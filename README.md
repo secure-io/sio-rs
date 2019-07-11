@@ -1,5 +1,3 @@
-# Secure IO
-
 [![Crate](https://img.shields.io/badge/crates.io-v0.2.0-orange.svg)](https://crates.io/crates/sio)
 [![Build Status](https://api.cirrus-ci.com/github/secure-io/sio-rs.svg?branch=master)](https://cirrus-ci.com/github/secure-io/sio-rs)
 [![Docs](https://docs.rs/sio/badge.svg?version=0.2.0)](https://docs.rs/sio)
