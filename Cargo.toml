@@ -18,17 +18,22 @@ incremental = false
 overflow-checks = false
 
 [features]
-default = ["ring", "must_close"]
+default = ["ring"]
 
-# The 'must_close' feature ensures that an EncWriter
-# or DecWriter is actually closed by an explicit
-# invocation of the 'close()' method. If an EncWriter
-# or DecWriter gets dropped without being closed
-# explicitly, its destructor will panic at runtime.
+# The 'debug_panic' feature prevents panicking when
+# an 'EncWriter' or 'DecWriter' gets dropped without
+# being closed explicitly - in debug mode. It has no
+# effect in release mode. The purpose of this feature
+# is to debug a panic caused by some other code. If 
+# that panic occurs while an 'EncWriter' or 'DecWriter'
+# has not been closed (yet) then the close call will be
+# skipped but the writer may get dropped (unwinding) - 
+# which then causes another panic. 
 #
-# This feature is enabled by default. Disabling it
-# only affects debug builds.
-must_close = []
+# This feature should only be enabled when debugging a
+# panic.
+debug_panic = []
+
 
 [dependencies]
 ring = { version = "0.14.6", optional = true }

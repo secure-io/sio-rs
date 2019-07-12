@@ -25,8 +25,7 @@ use std::io::Write;
 ///
 /// ```
 /// use std::io::Write;
-/// use sio::{Key, Nonce, Aad, EncWriter, Close};
-/// use sio::ring::AES_256_GCM;
+/// use sio::{Key, Nonce, Aad, EncWriter, Close, AES_256_GCM};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -87,8 +86,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, EncWriter, Close};
-    /// use sio::ring::AES_256_GCM;
+    /// use sio::{Key, Nonce, Aad, EncWriter, Close, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -135,8 +133,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, EncWriter, Close};
-    /// use sio::ring::AES_256_GCM;
+    /// use sio::{Key, Nonce, Aad, EncWriter, Close, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -282,9 +279,9 @@ impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
         //  - we encountered an error during a write or flush call.
         if !self.panicked && !self.errored {
             // For debugging purposes, we allow disabling the panic
-            // for debug builds - but only if the feature "must_close"
-            // (enabled by default) is turned off.
-            if !(cfg!(debug_assertions) && !cfg!(feature = "must_close")) {
+            // for debug builds - but only if the feature "debug_panic"
+            // is turned on.
+            if !(cfg!(debug_assertions) && cfg!(feature = "debug_panic")) {
                 // Actually, Drop implementations should not panic.
                 // However, not closing the EncWriter (see: close())
                 // implies not encrypting the entire plaintext such that
@@ -292,9 +289,9 @@ impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
                 // decrypted anymore. Consequently, we would "loose" data.
                 //
                 // We could call close() here if it hasn't been called explicitly
-                // by callers but that would only succeed if the no other I/O error
+                // by callers but that would only succeed if no other I/O error
                 // occurs. Otherwise, we are in the same situation as before. Calling
-                // close() here would an optimistic approach - while in cryptography
+                // close() here would be an optimistic approach - while in cryptography
                 // we have to be pessimistic.
                 assert!(
                     self.closed,
@@ -328,8 +325,7 @@ impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
 ///
 /// ```
 /// use std::io::Write;
-/// use sio::{Key, Nonce, Aad, DecWriter, Close};
-/// use sio::ring::AES_256_GCM;
+/// use sio::{Key, Nonce, Aad, DecWriter, Close, AES_256_GCM};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -390,8 +386,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, DecWriter, Close};
-    /// use sio::ring::AES_256_GCM;
+    /// use sio::{Key, Nonce, Aad, DecWriter, Close, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -441,8 +436,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, DecWriter, Close};
-    /// use sio::ring::AES_256_GCM;
+    /// use sio::{Key, Nonce, Aad, DecWriter, Close, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -588,9 +582,9 @@ impl<A: Algorithm, W: Write> Drop for DecWriter<A, W> {
         //  - we encountered an error during a write or flush call.
         if !self.panicked && !self.errored {
             // For debugging purposes,we allow disabling the panic
-            // for debug builds - but only if the feature "must_close"
-            // (enabled by default) is turned off.
-            if !(cfg!(debug_assertions) && !cfg!(feature = "must_close")) {
+            // for debug builds - but only if the feature "debug_panic"
+            // is turned on.
+            if !(cfg!(debug_assertions) && cfg!(feature = "debug_panic")) {
                 // Actually, Drop implementations should not panic.
                 // However, not closing the DecWriter (see: close())
                 // implies not decrypting the entire ciphertext and
@@ -602,7 +596,7 @@ impl<A: Algorithm, W: Write> Drop for DecWriter<A, W> {
                 // by callers but that would only succeed if the ciphertext
                 // is authentic and no other I/O error occurs. Otherwise, we
                 // are in the same situation as before. Calling close() here
-                // would an optimistic approach - while in cryptography we have
+                // would be an optimistic approach - while in cryptography we have
                 // to be pessimistic.
                 assert!(
                     self.closed,
