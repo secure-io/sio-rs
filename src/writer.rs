@@ -1,3 +1,7 @@
+// Copyright (c) 2019 Andreas Auernhammer. All rights reserved.
+// Use of this source code is governed by a license that can be
+// found in the LICENSE file.
+
 use super::aead::Counter;
 use super::{Aad, Algorithm, Invalid, Key, Nonce, BUF_SIZE, MAX_BUF_SIZE};
 use std::io;

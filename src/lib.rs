@@ -1,3 +1,7 @@
+// Copyright (c) 2019 Andreas Auernhammer. All rights reserved.
+// Use of this source code is governed by a license that can be
+// found in the LICENSE file.
+
 //! Authenticated encryption for I/O streams.
 //!
 //! The `sio` crate implements authenticated encryption for the `Read` and `Write` traits.
@@ -127,8 +131,10 @@ pub use self::writer::{Close, DecWriter, EncWriter};
 
 mod aead;
 mod error;
-mod ring;
 mod writer;
+
+#[cfg(feature = "ring")]
+mod ring;
 
 #[cfg(feature = "ring")]
 pub use self::ring::AES_256_GCM;

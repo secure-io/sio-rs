@@ -1,3 +1,7 @@
+// Copyright (c) 2019 Andreas Auernhammer. All rights reserved.
+// Use of this source code is governed by a license that can be
+// found in the LICENSE file.
+
 use crate::error::{Exceeded, Invalid, NotAuthentic};
 use std::marker::PhantomData;
 
