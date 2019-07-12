@@ -1,4 +1,3 @@
-use sio::ring::AES_256_GCM;
 use sio::*;
 use std::{io, io::Write};
 
