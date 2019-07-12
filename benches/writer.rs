@@ -1,6 +1,6 @@
 #![feature(test)]
 
-use sio::{ring::*, *};
+use sio::*;
 use std::{io, io::Write};
 
 extern crate test;
@@ -9,11 +9,12 @@ use test::Bencher;
 type AEAD = AES_256_GCM;
 
 fn buffer_size() -> usize {
-    if let Ok(value) = std::env::var("SIO_BUF_SIZE") {
+    const BUFFER_SIZE: &'static str = "SIO_BUF_SIZE";
+    if let Ok(value) = std::env::var(BUFFER_SIZE) {
         let value: usize = value
             .as_str()
             .parse()
-            .expect("'SIO_BUF_SIZE' is not a number");
+            .expect(format!("'{}' is not a number", BUFFER_SIZE).as_str());
         1024 * value
     } else {
         sio::BUF_SIZE
