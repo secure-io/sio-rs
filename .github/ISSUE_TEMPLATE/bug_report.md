@@ -1,4 +1,13 @@
-#### Bug describtion
+---
+name: Bug report
+about: 'Please use this template if you want to report a bug. '
+title: ''
+labels: ''
+assignees: ''
+
+---
+
+#### Bug description
 <!--
 If possible, provide a recipe for reproducing the error.
 Ideally provide a code snippet that shows the bug.
