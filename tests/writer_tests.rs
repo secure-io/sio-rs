@@ -81,11 +81,14 @@ fn close() -> io::Result<()> {
     let mut plaintext = Vec::with_capacity(data.len());
 
     let mut writer = EncWriter::new(
-        DecWriter::new(
-            &mut plaintext,
-            &key,
-            Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
-            Aad::empty(),
+        io::BufWriter::new(
+            DecWriter::new(
+                &mut plaintext,
+                &key,
+                Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+                Aad::empty(),
+            )
+            .closer(),
         ),
         &key,
         Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),

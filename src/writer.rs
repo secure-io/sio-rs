@@ -29,7 +29,7 @@ use std::io::Write;
 ///
 /// ```
 /// use std::io::Write;
-/// use sio::{Key, Nonce, Aad, EncWriter, Close, AES_256_GCM};
+/// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -54,7 +54,7 @@ use std::io::Write;
 /// writer.write_all(plaintext).unwrap();
 /// writer.close().unwrap(); // Complete the encryption process explicitly.
 /// ```
-pub struct EncWriter<A: Algorithm, W: Write> {
+pub struct EncWriter<A: Algorithm, W: Write + internal::Close> {
     inner: W,
     algorithm: A,
     buffer: Box<[u8]>,
@@ -79,7 +79,7 @@ pub struct EncWriter<A: Algorithm, W: Write> {
     panicked: bool,
 }
 
-impl<A: Algorithm, W: Write> EncWriter<A, W> {
+impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     /// Creates a new `EncWriter` with a default buffer size of 16 KiB.
     ///
     /// Anything written to the `EncWriter` gets encrypted and authenticated
@@ -90,7 +90,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, EncWriter, Close, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -137,7 +137,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, EncWriter, Close, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -204,6 +204,17 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
         })
     }
 
+    #[must_use = "An EncWriter must be closed to successfully complete the encryption process. Ignoring this result may cause incomplete ciphertext data."]
+    #[inline(always)]
+    pub fn close(mut self) -> io::Result<()> {
+        internal::Close::close(&mut self)
+    }
+
+    #[inline(always)]
+    pub fn closer(self) -> impl Write + Close {
+        Closer::wrap(self)
+    }
+
     /// Encrypt and authenticate the buffer and write the ciphertext
     /// to the inner writer.
     fn write_buffer(&mut self, len: usize) -> io::Result<()> {
@@ -220,7 +231,7 @@ impl<A: Algorithm, W: Write> EncWriter<A, W> {
     }
 }
 
-impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
+impl<A: Algorithm, W: Write + internal::Close> Write for EncWriter<A, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
@@ -276,7 +287,20 @@ impl<A: Algorithm, W: Write> Write for EncWriter<A, W> {
     }
 }
 
-impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
+impl<A: Algorithm, W: Write + internal::Close> internal::Close for EncWriter<A, W> {
+    fn close(&mut self) -> io::Result<()> {
+        if self.errored {
+            return Err(io::Error::from(io::ErrorKind::Other));
+        }
+        self.closed = true;
+        self.aad[0] = 0x80; // For the last fragment change the AAD
+
+        self.write_buffer(self.pos)
+            .and_then(|()| self.inner.close())
+    }
+}
+
+impl<A: Algorithm, W: Write + internal::Close> Drop for EncWriter<A, W> {
     fn drop(&mut self) {
         // We must not check whether the EncWriter has been closed if:
         //  - a inner write or flush call panic'd.
@@ -329,7 +353,7 @@ impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
 ///
 /// ```
 /// use std::io::Write;
-/// use sio::{Key, Nonce, Aad, DecWriter, Close, AES_256_GCM};
+/// use sio::{Key, Nonce, Aad, DecWriter, AES_256_GCM};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -354,7 +378,7 @@ impl<A: Algorithm, W: Write> Drop for EncWriter<A, W> {
 ///
 /// println!("{}", String::from_utf8_lossy(plaintext.as_slice())); // Let's print the plaintext.
 /// ```
-pub struct DecWriter<A: Algorithm, W: Write> {
+pub struct DecWriter<A: Algorithm, W: Write + internal::Close> {
     inner: W,
     algorithm: A,
     buffer: Box<[u8]>,
@@ -379,7 +403,7 @@ pub struct DecWriter<A: Algorithm, W: Write> {
     panicked: bool,
 }
 
-impl<A: Algorithm, W: Write> DecWriter<A, W> {
+impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// Creates a new `DecWriter` with a default buffer size of 16 KiB.
     ///
     /// Anything written to the `DecWriter` gets decrypted and verified
@@ -390,7 +414,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, DecWriter, Close, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, DecWriter, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -440,7 +464,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, DecWriter, Close, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, DecWriter, AES_256_GCM};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
@@ -509,6 +533,17 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
         })
     }
 
+    #[must_use = "A DecWriter must be closed to successfully complete the decryption process. Ignoring this result may cause incomplete plaintext data."]
+    #[inline(always)]
+    pub fn close(mut self) -> io::Result<()> {
+        internal::Close::close(&mut self)
+    }
+
+    #[inline(always)]
+    pub fn closer(self) -> impl Write + Close {
+        Closer::wrap(self)
+    }
+
     /// Decrypt and verifies the buffer and write the plaintext
     /// to the inner writer.
     fn write_buffer(&mut self, len: usize) -> io::Result<()> {
@@ -523,7 +558,7 @@ impl<A: Algorithm, W: Write> DecWriter<A, W> {
     }
 }
 
-impl<A: Algorithm, W: Write> Write for DecWriter<A, W> {
+impl<A: Algorithm, W: Write + internal::Close> Write for DecWriter<A, W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
@@ -579,7 +614,20 @@ impl<A: Algorithm, W: Write> Write for DecWriter<A, W> {
     }
 }
 
-impl<A: Algorithm, W: Write> Drop for DecWriter<A, W> {
+impl<A: Algorithm, W: Write + internal::Close> internal::Close for DecWriter<A, W> {
+    fn close(&mut self) -> io::Result<()> {
+        if self.errored {
+            return Err(io::Error::from(io::ErrorKind::Other));
+        }
+        self.closed = true;
+        self.aad[0] = 0x80; // For the last fragment change the AAD
+
+        self.write_buffer(self.pos)
+            .and_then(|()| self.inner.close())
+    }
+}
+
+impl<A: Algorithm, W: Write + internal::Close> Drop for DecWriter<A, W> {
     fn drop(&mut self) {
         // We must not check whether the DecWriter has been closed if:
         //  - a inner write or flush call panic'd.
@@ -611,103 +659,143 @@ impl<A: Algorithm, W: Write> Drop for DecWriter<A, W> {
     }
 }
 
-/// A trait for objects which should be closed before they are dropped
-/// and may fail doing so.
-///
-/// Both, the `EncWriter` and `DecWriter` encrypt resp. decrypt the last
-/// fragment differently than any previous fragment. Therefore they should
-/// be closed to trigger the en/decryption of the last fragment. If not
-/// done explicitly an `EncWriter` resp. `DecWriter` gets closed when it
-/// gets dropped. However, e.g. decrypting the final fragment may fail
-/// because it may not be authentic, and therefore, calling code should
-/// such potential errors. Therefore, callers should always call `close`
-/// after using an `EncWriter` or `DecWriter`.
-///
-/// At the moment implementing `Close` also requires implementing a
-/// private trait such that it cannot be implemented by any type
-/// outside `sio`.
-pub trait Close: Write + private::Private {
-    /// Tries to close the byte-oriented sinks such that
-    /// no further operation should succeed. Therefore it
-    /// consumes the sink.
-    fn close(self) -> io::Result<()>;
+mod internal {
+    pub trait Close {
+        fn close(&mut self) -> std::io::Result<()>;
+    }
 }
 
-mod private {
-    pub trait Private {}
+/// A trait implemented by objects that should be closed before they are dropped.
+/// Any writer that should be wrapped by `EncWriter` or `DecWriter` must implement
+/// this trait.
+///
+/// Implementations of `Close` should be composable such that closing the outer
+/// object triggers its cleanup logic and then, if successful, invokes the `close`
+/// method of the inner object. Therefore, closing any object within a chain
+/// of objects should trigger a `close` of the object one hierarchy-level further
+/// down.
+///
+/// In general, `close` should only be called once. If `close` returns an error callers
+/// must not assume anything about the state of the object. The behavior of further `close`
+/// calls is implementation-dependent. In any case, callers must not try to modifed the state
+/// of the `Close` implementation after calling `close` once. Doing so is a logical error and
+/// implementations may `panic` in this case.
+///
+/// # Relation between `Close` and `EncWriter` / `DecWriter`.
+///
+/// Both, `EncWriter` and `DecWriter`, **must** be closed to complete the encryption /
+/// decryption process and handle any error that might occur when processing remaining data.
+/// If an `EncWriter` or `DecWriter` gets dropped before being closed (and no `write` error
+/// has occurred before) then dropping it will panic. Not closing an `EncWriter` produces
+/// ciphertext data that cannot be decrypted reliably. Even worse, not closing a `DecWriter`,
+/// produces incomplete, and therefore, not authentic plaintext data. Therefore, not closing
+/// these writers is a security-critical and logical error.
+///
+/// However, `EncWriter` as well as `DecWriter` don't implement `Close` directly. Instead, both
+/// provide a separate `close` method that takes ownership of the writer, and therefore,
+/// ensures that the `EncWriter` / `DecWriter` is not used later on through Rust's
+/// ownership system. In particular, this prevents e.g. write-after-close bugs at compile
+/// time. However, you may need to opt-out of this guarantees in certain situations - in
+/// particular when composing more than one `EncWriter` / `DecWriter` with other `Write`
+/// implementations. For example, when inserting a `std::io::BufWriter` between two `EncWriter`s.
+/// Then you need to convert the inner `EncWriter` into a type that implements `Close`. Otherwise,
+/// you will get a compiler error indicating that the `Close` trait-bound is not satisfied when
+/// calling the `close` method of the outer `EncWriter`. You can achieve this by calling the
+/// `closer` method.
+/// ```
+/// use sio::{Aad, EncWriter, Key, Nonce, AES_256_GCM};
+/// use std::io;
+///
+/// fn main() -> io::Result<()> {
+///    let outer_key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+///    let inner_key: Key<AES_256_GCM> = Key::new([1; Key::<AES_256_GCM>::SIZE]);
+///
+///    let writer = EncWriter::new(
+///        io::BufWriter::new(EncWriter::new(
+///            io::sink(),
+///            &inner_key,
+///            Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+///            Aad::empty(),
+///        ).closer() // Without this `closer` call the code would not compile.
+///        ),
+///        &outer_key,
+///        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+///        Aad::empty(),
+///    );
+///
+///    writer.close()
+/// }
+/// ```
+/// By calling `closer` you get an implementation of `Close` that preserves the
+/// "no write-after-close" guarantee of `EncWriter` / `DecWriter` using runtime
+/// checks. In particular, trying to perform a write after calling close once
+/// causes a panic. Therefore, you should use `closer` with caution and only when
+/// really needed.
+pub trait Close {
+    fn close(&mut self) -> io::Result<()>;
 }
 
-impl<A: Algorithm, W: Write> EncWriter<A, W> {
-    /// Encrypt and authenticate the buffer as last fragment,
-    /// write it to and flush the inner writer.
-    fn close_internal(&mut self) -> io::Result<()> {
+impl<T: Close + ?Sized> internal::Close for T {
+    #[inline(always)]
+    fn close(&mut self) -> io::Result<()> {
+        Close::close(self)
+    }
+}
+
+struct Closer<W: Write + internal::Close> {
+    inner: W,
+    closed: bool,
+    errored: bool,
+}
+
+impl<W: Write + internal::Close> Closer<W> {
+    #[inline(always)]
+    pub fn wrap(inner: W) -> Self {
+        Self {
+            inner: inner,
+            closed: false,
+            errored: false,
+        }
+    }
+}
+
+impl<W: Write + internal::Close> Write for Closer<W> {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if self.closed {
+            panic!("write must not be called after close");
+        }
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        self.closed = true;
-        self.aad[0] = 0x80; // For the last fragment change the AAD
+        match self.inner.write(buf) {
+            Ok(n) => Ok(n),
+            Err(val) => {
+                self.errored = true;
+                Err(val)
+            }
+        }
+    }
 
-        self.write_buffer(self.pos)
-            .and_then(|()| self.inner.flush())
+    #[inline(always)]
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
     }
 }
 
-impl<A: Algorithm, W: Write> private::Private for EncWriter<A, W> {}
-
-impl<A: Algorithm, W: Write> Close for EncWriter<A, W> {
-    #[must_use = "An EncWriter must be closed to successfully complete the encryption process. Ignoring this result may cause incomplete ciphertext data."]
-    fn close(mut self) -> io::Result<()> {
-        self.close_internal()
-    }
-}
-
-impl<A1: Algorithm, A2: Algorithm, W: Write> EncWriter<A1, DecWriter<A2, W>> {
-    /// Complete the encryption by encrypting and authenticating the
-    /// buffered content as last fragment and write the ciphertext to
-    /// the inner `DecWriter`.
-    ///
-    /// If the encryption completes successfully then it also closes
-    /// the inner `DecWriter` to complete the inner decryption.
-    #[must_use = "An EncWriter must be closed to successfully complete the encryption process. Ignoring this result may cause incomplete ciphertext data."]
-    pub fn close(mut self) -> io::Result<()> {
-        self.close_internal()
-            .and_then(|()| self.inner.close_internal())
-    }
-}
-
-impl<A: Algorithm, W: Write> DecWriter<A, W> {
-    /// Decrypt and verifies the buffer as last fragment,
-    /// write it to and flush the inner writer.
-    fn close_internal(&mut self) -> io::Result<()> {
+impl<W: Write + internal::Close> Close for Closer<W> {
+    #[inline]
+    fn close(&mut self) -> io::Result<()> {
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        self.closed = true;
-        self.aad[0] = 0x80; // For the last fragment change the AAD
-        self.write_buffer(self.pos)
-            .and_then(|()| self.inner.flush())
-    }
-}
-
-impl<A: Algorithm, W: Write> private::Private for DecWriter<A, W> {}
-
-impl<A: Algorithm, W: Write> Close for DecWriter<A, W> {
-    #[must_use = "A DecWriter must be closed to successfully complete the decryption process. Ignoring this result may cause incomplete plaintext data."]
-    fn close(mut self) -> io::Result<()> {
-        self.close_internal()
-    }
-}
-
-impl<A1: Algorithm, A2: Algorithm, W: Write> DecWriter<A1, EncWriter<A2, W>> {
-    /// Complete the decryption by decrypting and verifying the
-    /// buffered content as last ciphertext fragment and write the
-    /// plaintext to the inner `EncWriter`.
-    ///
-    /// If the decryption completes successfully then it also closes
-    /// the inner `EncWriter` to complete the inner encryption.
-    #[must_use = "A DecWriter must be closed to successfully complete the decryption process. Ignoring this result may cause incomplete plaintext data."]
-    pub fn close(mut self) -> io::Result<()> {
-        self.close_internal()
-            .and_then(|()| self.inner.close_internal())
+        if self.closed {
+            Ok(())
+        } else {
+            self.closed = true;
+            let r = internal::Close::close(&mut self.inner);
+            self.errored = r.is_err();
+            r
+        }
     }
 }
