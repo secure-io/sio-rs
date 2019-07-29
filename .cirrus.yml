@@ -12,9 +12,6 @@ task:
      - name: linux (nightly)
        container:
           image: rustlang/rust:nightly
-       check_script: 
-          - rustup component add rustfmt
-          - cargo fmt -- --check
        build_script:
           - cargo build --verbose --all
           - cargo bench --verbose --all --no-run
