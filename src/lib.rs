@@ -48,23 +48,20 @@
 //!
 //! There is also an optional fourth parameter (buffer/fragment size) which we will cover later.
 //!
-//! Now, there are two important rules you have to ensure are never violated by your code:
-//!   1. **Correctness:**  
-//!     The parameters (`key'`, `nonce'` `aad'`) for decryption must match exactly the parameters
-//!     (`key`, `nonce` `aad`) used when encrypting the data.
-//!   2. **Freshness:**  
-//!      When encrypting a data stream, you must use a new `key` **or** a new `nonce` value that
-//!      has **never** been used before.
+//! Now, there is one important rule that must never be violated by your code since security
+//! crucially depends on it:
+//! <p style="margin-left: 40px; margin-right: 50px; border:1px; border-style:solid; border-color:#000000; padding: 0.3em">
+//!      When encrypting a data stream you must use a new <code>key</code> <b>or</b> a new
+//!      <code>nonce</code> value such that this particular <code>key</code>-<code>nonce</code>
+//!      combination has <b>never</b> been used before.
+//! </p>
 //!
-//! The 1st rule is pretty obvious. If you, for example, use different keys for encryption and
-//! decryption then the decryption will fail. The same applies to the nonce and associated data.
-//!
-//! The 2nd rule may be less obvious but it is at least as important as the 1st one since security
-//! crucially depends on it. In general, the authenticated encryption algorithm (used by the
-//! channel construction) assumes that, given the same key, the nonce value does never repeat.
-//! Violating this assumption breaks the security properties and potentially allows decrypting
-//! or forging data without knowing the secret key. But don't worry, there are best practices for
-//! dealing with keys and nonce values which can help here.
+//! In general, the authenticated encryption algorithm (used by the channel construction) assumes
+//! that, given the same key, the nonce value does never repeat. Violating this assumption breaks
+//! the security properties and potentially allows decrypting or forging data without knowing the
+//! secret key. Therefore, you have to make sure that you use a key-nonce combination only once.
+//! But don't worry, there are best practices for dealing with keys and nonce values which can help
+//! here.
 //!
 //! Next, we will take a look at some examples for encryption and decryption.
 //!
@@ -76,14 +73,14 @@
 //! use std::io;
 //! use std::io::Write;
 //! use std::fs::File;
-//! use sio::{EncWriter, Key, Nonce, Aad, AES_256_GCM, Close};
+//! use sio::{EncWriter, Key, Nonce, Aad, AES_256_GCM, NopCloser};
 //!
 //! fn main() -> io::Result<()> {
 //!     // Obviously, do NOT use this demo key for anything real!
 //!     let secret_key: Key::<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
 //!     
 //!     let mut f = EncWriter::new(
-//!        File::create("foo.txt")?,
+//!        NopCloser::wrap(File::create("foo.txt")?),
 //!        &secret_key,
 //!        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
 //!        Aad::empty(),
@@ -96,26 +93,26 @@
 //! Here, we try to create and wrap the file `foo.txt` and encrypt the string
 //! `"Hello World"` using the [`AES_256_GCM`](https://en.wikipedia.org/wiki/Galois/Counter_Mode)
 //! algorithm before writing it to the file. Note that we call a `close` method
-//! after writing. This is *very important* and you should take a look at the
-//! `Close` trait for a detailed explanation.
+//! after writing. This is very important and you should take a look at the
+//! `Close` trait for a detailed explanation about why this call is necessary.
 //!
 //! # Decryption
 //!
-//! Similarly, you can decrypt data by wrapping a writer with a `DecWriter`. The `DecWriter`
-//! is also generic over an authenticated encryption algorithm and expects the same
-//! `Key`, `Nonce` and `Aad` used to encrypt the data.
+//! Similarly, you can decrypt data by using a `DecWriter` instead of an `EncWriter`. The
+//! `DecWriter` is also generic over an authenticated encryption algorithm and expects the
+//! same `Key`, `Nonce` and `Aad` used before to encrypt the data.
 //! ```norun
 //! use std::io;
 //! use std::io::{Read, Write};
 //! use std::fs::File;
-//! use sio::{DecWriter, Key, Nonce, Aad, AES_256_GCM, Close};
+//! use sio::{DecWriter, Key, Nonce, Aad, AES_256_GCM, NopCloser};
 //!
 //! fn main() -> io::Result<()> {
 //!     // Obviously, do NOT use this demo key for anything real!
 //!     let secret_key: Key::<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
 //!     
 //!     let mut out = DecWriter::new(
-//!        io::stdout(),
+//!        NopCloser::wrap(io::stdout()),
 //!        &secret_key,
 //!        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
 //!        Aad::empty(),
@@ -124,13 +121,21 @@
 //!     io::copy(&mut File::open("foo.txt")?, &mut out)?;
 //!     out.close()
 //! }
+//! ```
+//! Here, we wrap the standard output file descriptor (STDOUT) with a `DecWriter`
+//! such that everything written to `out` gets decrypted and verified before passed to
+//! STDOUT. Than, we open the `foo.txt` file again and copy its content to `out`. Observe
+//! that we invoke a `close` method at the end again. Refer to the `Close` trait for an
+//! explanation about why this call is necessary.
 
 pub use self::aead::{Aad, Algorithm, Key, Nonce};
 pub use self::error::{Invalid, NotAuthentic};
+pub use self::utils::NopCloser;
 pub use self::writer::{Close, DecWriter, EncWriter};
 
 mod aead;
 mod error;
+mod utils;
 mod writer;
 
 #[cfg(feature = "ring")]
