@@ -10,7 +10,11 @@ use std::{io, io::Write};
 extern crate test;
 use test::Bencher;
 
+#[cfg(feature = "aesgcm")]
 type AEAD = AES_256_GCM;
+
+#[cfg(not(feature = "aesgcm"))]
+type AEAD = CHACHA20_POLY1305;
 
 fn buffer_size() -> usize {
     const BUFFER_SIZE: &'static str = "SIO_BUF_SIZE";

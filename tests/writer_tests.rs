@@ -5,9 +5,15 @@
 use sio::*;
 use std::{io, io::Write};
 
+#[cfg(feature = "aesgcm")]
+type AEAD = AES_256_GCM;
+
+#[cfg(not(feature = "aesgcm"))]
+type AEAD = CHACHA20_POLY1305;
+
 #[test]
 fn write() -> io::Result<()> {
-    let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    let key: Key<AEAD> = Key::new([0; Key::<AEAD>::SIZE]);
 
     let data = [0; 1 << 20];
     let mut plaintext = Vec::with_capacity(data.len());
@@ -16,7 +22,7 @@ fn write() -> io::Result<()> {
     let mut writer = EncWriter::new(
         &mut ciphertext,
         &key,
-        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+        Nonce::new([0; Nonce::<AEAD>::SIZE]),
         Aad::empty(),
     );
     let half = data.len() / 2;
@@ -28,7 +34,7 @@ fn write() -> io::Result<()> {
     let mut writer = DecWriter::new(
         &mut plaintext,
         &key,
-        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+        Nonce::new([0; Nonce::<AEAD>::SIZE]),
         Aad::empty(),
     );
     let half = ciphertext.len() / 2;
@@ -43,26 +49,26 @@ fn write() -> io::Result<()> {
 
 #[test]
 fn write_empty() -> io::Result<()> {
-    let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    let key: Key<AEAD> = Key::new([0; Key::<AEAD>::SIZE]);
 
     let data = [0; 0];
     let mut plaintext = Vec::new();
-    let mut ciphertext = Vec::with_capacity(AES_256_GCM::TAG_LEN);
+    let mut ciphertext = Vec::with_capacity(AEAD::TAG_LEN);
 
     EncWriter::new(
         &mut ciphertext,
         &key,
-        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+        Nonce::new([0; Nonce::<AEAD>::SIZE]),
         Aad::empty(),
     )
     .close()
     .expect("The encryption failed");
 
-    assert_eq!(ciphertext.len(), AES_256_GCM::TAG_LEN);
+    assert_eq!(ciphertext.len(), AEAD::TAG_LEN);
     let mut writer = DecWriter::new(
         &mut plaintext,
         &key,
-        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+        Nonce::new([0; Nonce::<AEAD>::SIZE]),
         Aad::empty(),
     );
     writer
@@ -75,7 +81,7 @@ fn write_empty() -> io::Result<()> {
 
 #[test]
 fn close() -> io::Result<()> {
-    let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    let key: Key<AEAD> = Key::new([0; Key::<AEAD>::SIZE]);
 
     let data = [0; 1 << 20];
     let mut plaintext = Vec::with_capacity(data.len());
@@ -85,13 +91,13 @@ fn close() -> io::Result<()> {
             DecWriter::new(
                 &mut plaintext,
                 &key,
-                Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+                Nonce::new([0; Nonce::<AEAD>::SIZE]),
                 Aad::empty(),
             )
             .closer(),
         ),
         &key,
-        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+        Nonce::new([0; Nonce::<AEAD>::SIZE]),
         Aad::empty(),
     );
     writer.write_all(&data).and_then(|_| writer.close())?;

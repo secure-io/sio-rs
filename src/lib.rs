@@ -16,18 +16,21 @@
 //! <table>
 //! <tr><th>Feature
 //!     <th>Description
-//! <tr><td><code>ring (default)</code>
+//! <tr><td><code>c20p1305 (default)</code>
 //!     <td>Use <a href="https://briansmith.org/rustdoc/ring/"><code>ring</code></a> to provide
-//!     default implementations of AES-256-GCM and ChaCha20-Poly1305 based on Google's
-//!     <a href="https://github.com/google/boringssl">BoringSSL</a> by implementing the
-//!     <code>Algorithm</code> trait.
+//!     default implementation of ChaCha20-Poly1305 based on Google's <a href="https://github.com/google/boringssl">BoringSSL</a>
+//!     by implementing the <code>Algorithm</code> trait.
+//! <tr><td><code>aesgcm</code>
+//!     <td>Use <a href="https://briansmith.org/rustdoc/ring/"><code>ring</code></a> to provide
+//!     default implementation of AES-256-GCM based on Google's <a href="https://github.com/google/boringssl">BoringSSL</a>
+//!     by implementing the <code>Algorithm</code> trait.
 //! <tr><td><code>debug_panic</code>
 //!     <td>This feature only affects debug builds and should only be enabled when debugging a
 //!     panic. Both, <code>EncWriter</code> and <code>DecWriter</code> must be closed explicitly.
 //!     Otherwise, dropping them causes a panic. Take a look at the <code>Close</code> trait for
 //!     more details. When this feature is enabled, dropping an <code>EncWriter</code> or
 //!     <code>DecWriter</code> without closing it explicitly does not trigger a panic in debug mode.
-//!     This may be useful when debugging a panic of some other code.
+//!     This may be useful when debugging a panic.
 //! </table>
 //!
 //! # Introduction
@@ -138,14 +141,15 @@ mod error;
 mod utils;
 mod writer;
 
-#[cfg(feature = "ring")]
-mod ring;
+#[cfg(feature = "aesgcm")]
+mod aesgcm;
+#[cfg(feature = "aesgcm")]
+pub use self::aesgcm::AES_256_GCM;
 
-#[cfg(feature = "ring")]
-pub use self::ring::AES_256_GCM;
-
-#[cfg(feature = "ring")]
-pub use self::ring::CHACHA20_POLY1305;
+#[cfg(feature = "c20p1305")]
+mod c20p1305;
+#[cfg(feature = "c20p1305")]
+pub use self::c20p1305::CHACHA20_POLY1305;
 
 pub const MAX_BUF_SIZE: usize = (1 << 24) - 1;
 pub const BUF_SIZE: usize = 1 << 14;
