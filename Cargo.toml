@@ -18,7 +18,11 @@ incremental = false
 overflow-checks = false
 
 [features]
-default = ["ring"]
+default = ["c20p1305"]
+
+c20p1305 = ["ring"]
+
+aesgcm = ["ring"]
 
 # The 'debug_panic' feature prevents panicking when
 # an 'EncWriter' or 'DecWriter' gets dropped without

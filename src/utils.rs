@@ -53,17 +53,17 @@ impl<W: Write + Close> Close for io::LineWriter<W> {
 ///
 /// ```
 /// use std::{io, io::Write};
-/// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM, NopCloser};
+/// use sio::{Key, Nonce, Aad, EncWriter, CHACHA20_POLY1305, NopCloser};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
 /// // Obviously, don't use this all-zeros key for anything real.
-/// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+/// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // Make sure you use an unique key-nonce combination!
 /// // Reusing a nonce value for the same secret key breaks
 /// // the security of the encryption algorithm.
-/// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+/// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // You must be able to re-generate this aad to decrypt
 /// // the ciphertext again. Usually, it's stored together with

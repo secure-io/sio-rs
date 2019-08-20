@@ -29,17 +29,17 @@ use std::io::Write;
 ///
 /// ```
 /// use std::io::Write;
-/// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM};
+/// use sio::{Key, Nonce, Aad, EncWriter, CHACHA20_POLY1305};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
 /// // Obviously, don't use this all-zeros key for anything real.
-/// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+/// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // Make sure you use an unique key-nonce combination!
 /// // Reusing a nonce value for the same secret key breaks
 /// // the security of the encryption algorithm.
-/// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+/// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // You must be able to re-generate this aad to decrypt
 /// // the ciphertext again. Usually, it's stored together with
@@ -90,17 +90,17 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, EncWriter, CHACHA20_POLY1305};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
     /// // Obviously, don't use this all-zeros key for anything real.
-    /// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Make sure you use an unique key-nonce combination!
     /// // Reusing a nonce value for the same secret key breaks
     /// // the security of the encryption algorithm.
-    /// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // You must be able to re-generate this aad to decrypt
     /// // the ciphertext again. Usually, it's stored together with
@@ -137,17 +137,17 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, EncWriter, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, EncWriter, CHACHA20_POLY1305};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
     /// // Obviously, don't use this all-zeros key for anything real.
-    /// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Make sure you use an unique key-nonce combination!
     /// // Reusing a nonce value for the same secret key breaks
     /// // the security of the encryption algorithm.
-    /// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // You must be able to re-generate this aad to decrypt
     /// // the ciphertext again. Usually, it's stored together with
@@ -353,15 +353,15 @@ impl<A: Algorithm, W: Write + internal::Close> Drop for EncWriter<A, W> {
 ///
 /// ```
 /// use std::io::Write;
-/// use sio::{Key, Nonce, Aad, DecWriter, AES_256_GCM};
+/// use sio::{Key, Nonce, Aad, DecWriter, CHACHA20_POLY1305};
 ///
 /// // Load your secret keys from a secure location or derive
 /// // them using a secure (password-based) key-derivation-function, like Argon2id.
 /// // Obviously, don't use this all-zeros key for anything real.
-/// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+/// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // Use the same nonce that was used during encryption.
-/// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+/// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // Use the same associated data (AAD) that was used during encryption.
 /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
@@ -370,9 +370,9 @@ impl<A: Algorithm, W: Write + internal::Close> Drop for EncWriter<A, W> {
 /// let mut writer = DecWriter::new(&mut plaintext, &key, nonce, aad);
 ///
 /// // Passing the ciphertext as raw bytes.
-/// writer.write(&[14, 95, 207, 89, 77, 7, 174, 168, 96, 128, 148, 207, 224,
-///                86, 236, 153 ,177, 220, 133, 123, 145, 175, 149, 241, 197,
-///                153, 28, 234, 143, 173, 101,243,33]).unwrap();
+/// writer.write(&[17, 137, 205, 68, 28, 113, 101, 52, 193, 68, 213, 16, 104,
+///                80, 203, 255, 183, 120, 46, 225, 192, 178, 253, 57, 67, 75,
+///                53, 57, 45, 94]).unwrap();
 ///
 /// writer.close().unwrap(); // Complete the decryption process explicitly!
 ///
@@ -414,15 +414,15 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, DecWriter, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, DecWriter, CHACHA20_POLY1305};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
     /// // Obviously, don't use this all-zeros key for anything real.
-    /// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Use the same nonce that was used during encryption.
-    /// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Use the same associated data (AAD) that was used during encryption.
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
@@ -433,9 +433,9 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// // Perform some write and flush operations
     /// // ...
     /// // For example:
-    /// writer.write(&[14, 95, 207, 89, 77, 7, 174, 168, 96, 128, 148, 207, 224,
-    ///                86, 236, 153 ,177, 220, 133, 123, 145, 175, 149, 241, 197,
-    ///                153, 28, 234, 143, 173, 101,243,33]).unwrap();
+    /// writer.write(&[17, 137, 205, 68, 28, 113, 101, 52, 193, 68, 213, 16, 104,
+    ///                80, 203, 255, 183, 120, 46, 225, 192, 178, 253, 57, 67, 75,
+    ///                53, 57, 45, 94]).unwrap();
     ///
     /// writer.close().unwrap(); // Complete the decryption process explicitly!
     ///
@@ -464,15 +464,15 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     ///
     /// ```
     /// use std::io::Write;
-    /// use sio::{Key, Nonce, Aad, DecWriter, AES_256_GCM};
+    /// use sio::{Key, Nonce, Aad, DecWriter, CHACHA20_POLY1305};
     ///
     /// // Load your secret keys from a secure location or derive
     /// // them using a secure (password-based) key-derivation-function, like Argon2id.
     /// // Obviously, don't use this all-zeros key for anything real.
-    /// let key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
+    /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Use the same nonce that was used for encryption.
-    /// let nonce = Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Use the same associated data (AAD) that was used for encryption.
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
@@ -490,9 +490,9 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// // Perform some write and flush operations
     /// // ...
     /// // For example:
-    /// writer.write(&[14, 95, 207, 89, 77, 7, 174, 168, 96, 128, 148, 207, 224,
-    ///                86, 236, 153 ,177, 220, 133, 123, 145, 175, 149, 241, 197,
-    ///                153, 28, 234, 143, 173, 101,243,33]).unwrap();
+    /// writer.write(&[17, 137, 205, 68, 28, 113, 101, 52, 193, 68, 213, 16, 104,
+    ///                80, 203, 255, 183, 120, 46, 225, 192, 178, 253, 57, 67, 75,
+    ///                53, 57, 45, 94]).unwrap();
     ///
     /// writer.close().unwrap(); // Complete the decryption process explicitly!
     ///
@@ -703,23 +703,23 @@ mod internal {
 /// calling the `close` method of the outer `EncWriter`. You can achieve this by calling the
 /// `closer` method.
 /// ```
-/// use sio::{Aad, EncWriter, Key, Nonce, AES_256_GCM};
+/// use sio::{Aad, EncWriter, Key, Nonce, CHACHA20_POLY1305};
 /// use std::io;
 ///
 /// fn main() -> io::Result<()> {
-///    let outer_key: Key<AES_256_GCM> = Key::new([0; Key::<AES_256_GCM>::SIZE]);
-///    let inner_key: Key<AES_256_GCM> = Key::new([1; Key::<AES_256_GCM>::SIZE]);
+///    let outer_key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
+///    let inner_key: Key<CHACHA20_POLY1305> = Key::new([1; Key::<CHACHA20_POLY1305>::SIZE]);
 ///
 ///    let writer = EncWriter::new(
 ///        io::BufWriter::new(EncWriter::new(
 ///            io::sink(),
 ///            &inner_key,
-///            Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+///            Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]),
 ///            Aad::empty(),
 ///        ).closer() // Without this `closer` call the code would not compile.
 ///        ),
 ///        &outer_key,
-///        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+///        Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]),
 ///        Aad::empty(),
 ///    );
 ///

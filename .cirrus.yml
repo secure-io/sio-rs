@@ -18,5 +18,7 @@ task:
      
   cargo_cache:
      folder: $CARGO_HOME/registry
-  test_script: cargo test --verbose --all
+  test_script: 
+          - cargo test --all
+          - cargo test --all --features=aesgcm 
   before_cache_script: rm -rf $CARGO_HOME/registry/index
