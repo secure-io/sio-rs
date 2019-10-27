@@ -6,6 +6,7 @@ use super::aead::Counter;
 use super::{Aad, Algorithm, Invalid, Key, Nonce, BUF_SIZE, MAX_BUF_SIZE};
 use std::io;
 use std::io::Write;
+use std::thread::panicking;
 
 /// Wraps a writer and encrypts and authenticates everything written to it.
 ///
@@ -72,11 +73,6 @@ pub struct EncWriter<A: Algorithm, W: Write + internal::Close> {
     // EncWriter again. This flag tells the Drop impl if it should skip the
     // close.
     closed: bool,
-
-    // If the inner writer panics in a call to write, we don't want to
-    // write the buffered data a second time in EncWriter's destructor. This
-    // flag tells the Drop impl if it should skip the close.
-    panicked: bool,
 }
 
 impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
@@ -200,7 +196,6 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
             aad: associated_data,
             errored: false,
             closed: false,
-            panicked: false,
         })
     }
 
@@ -218,16 +213,33 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     /// Encrypt and authenticate the buffer and write the ciphertext
     /// to the inner writer.
     fn write_buffer(&mut self, len: usize) -> io::Result<()> {
-        let ciphertext = self.algorithm.seal_in_place(
-            self.nonce.next()?,
+        let nonce = match self.nonce.next() {
+            Ok(nonce) => nonce,
+            Err(err) => {
+                self.errored = true;
+                return Err(err.into());
+            }
+        };
+
+        let ciphertext = match self.algorithm.seal_in_place(
+            nonce,
             &self.aad,
             &mut self.buffer[..len + A::TAG_LEN],
-        )?;
+        ) {
+            Ok(ciphertext) => ciphertext,
+            Err(err) => {
+                self.errored = true;
+                return Err(err.into());
+            }
+        };
 
-        self.panicked = true;
-        let r = self.inner.write_all(ciphertext);
-        self.panicked = false;
-        r
+        match self.inner.write_all(ciphertext) {
+            Ok(v) => Ok(v),
+            Err(err) => {
+                self.errored = true;
+                Err(err)
+            }
+        }
     }
 }
 
@@ -237,36 +249,32 @@ impl<A: Algorithm, W: Write + internal::Close> Write for EncWriter<A, W> {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
 
-        let r: io::Result<usize> = {
-            let n = buf.len();
+        let n = buf.len();
+        let remaining = self.buf_size - self.pos;
+        if n <= remaining {
+            self.buffer[self.pos..self.pos + n].copy_from_slice(buf);
+            self.pos += n;
+            return Ok(n);
+        }
 
-            let remaining = self.buf_size - self.pos;
-            if buf.len() <= remaining {
-                self.buffer[self.pos..self.pos + buf.len()].copy_from_slice(buf);
-                self.pos += buf.len();
-                return Ok(buf.len());
-            }
+        self.buffer[self.pos..self.buf_size].copy_from_slice(&buf[..remaining]);
+        self.write_buffer(self.buf_size)?;
+        self.pos = 0;
+        let buf = &buf[remaining..];
 
-            self.buffer[self.pos..self.buf_size].copy_from_slice(&buf[..remaining]);
-            self.write_buffer(self.buf_size)?;
-            self.pos = 0;
+        let chunks = buf.chunks(self.buf_size);
+        chunks
+            .clone()
+            .take(chunks.len() - 1) // Since we take only n-1 elements...
+            .try_for_each(|chunk| {
+                self.buffer[..self.buf_size].copy_from_slice(chunk);
+                self.write_buffer(self.buf_size)
+            })?;
 
-            let buf = &buf[remaining..];
-            let chunks = buf.chunks(self.buf_size);
-            chunks
-                .clone()
-                .take(chunks.len() - 1) // Since we take only n-1 elements...
-                .try_for_each(|chunk| {
-                    self.buffer[..self.buf_size].copy_from_slice(chunk);
-                    self.write_buffer(self.buf_size)
-                })?;
-            let last = chunks.last().unwrap(); // ... thereis always a last one.
-            self.buffer[..last.len()].copy_from_slice(last); // ... there is always a last one.
-            self.pos = last.len();
-            Ok(n)
-        };
-        self.errored = r.is_err();
-        r
+        let last = chunks.last().unwrap(); // ... thereis always a last one.
+        self.buffer[..last.len()].copy_from_slice(last); // ... there is always a last one.
+        self.pos = last.len();
+        Ok(n)
     }
 
     #[inline]
@@ -278,10 +286,7 @@ impl<A: Algorithm, W: Write + internal::Close> Write for EncWriter<A, W> {
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        self.panicked = true;
         let r = self.inner.flush();
-        self.panicked = false;
-
         self.errored = r.is_err();
         r
     }
@@ -302,29 +307,16 @@ impl<A: Algorithm, W: Write + internal::Close> internal::Close for EncWriter<A, 
 
 impl<A: Algorithm, W: Write + internal::Close> Drop for EncWriter<A, W> {
     fn drop(&mut self) {
-        // We must not check whether the EncWriter has been closed if:
-        //  - a inner write or flush call panic'd.
-        //  - we encountered an error during a write or flush call.
-        if !self.panicked && !self.errored {
-            // For debugging purposes, we allow disabling the panic
-            // for debug builds - but only if the feature "debug_panic"
-            // is turned on.
-            if !(cfg!(debug_assertions) && cfg!(feature = "debug_panic")) {
-                // Actually, Drop implementations should not panic.
-                // However, not closing the EncWriter (see: close())
-                // implies not encrypting the entire plaintext such that
-                // the ciphertext written to the inner writer cannot be
-                // decrypted anymore. Consequently, we would "loose" data.
-                //
-                // We could call close() here if it hasn't been called explicitly
-                // by callers but that would only succeed if no other I/O error
-                // occurs. Otherwise, we are in the same situation as before. Calling
-                // close() here would be an optimistic approach - while in cryptography
-                // we have to be pessimistic.
-                assert!(
-                    self.closed,
-                    "EncWriter must be closed explicitly via the close method before being dropped!"
-                );
+        // We must not check whether the EncWriter has been closed if
+        // we encountered an error during a write or flush call.
+        if !self.errored {
+            if !self.closed {
+                // We don't want to panic again if some code (between
+                // EncWriter::new(...) and EncWriter.close()) already
+                // panic'd. Otherwise we would cause a "double-panic".
+                if !panicking() {
+                    panic!("EncWriter must be closed explicitly via the close method before being dropped!")
+                }
             }
         }
     }
@@ -396,11 +388,6 @@ pub struct DecWriter<A: Algorithm, W: Write + internal::Close> {
     // EncWriter again. This flag tells the Drop impl if it should skip the
     // close.
     closed: bool,
-
-    // If the inner writer panics in a call to write, we don't want to
-    // write the buffered data a second time in DecWriter's destructor. This
-    // flag tells the Drop impl if it should skip the close.
-    panicked: bool,
 }
 
 impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
@@ -529,7 +516,6 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
             aad: associated_data,
             errored: false,
             closed: false,
-            panicked: false,
         })
     }
 
@@ -547,14 +533,33 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// Decrypt and verifies the buffer and write the plaintext
     /// to the inner writer.
     fn write_buffer(&mut self, len: usize) -> io::Result<()> {
-        let plaintext =
-            self.algorithm
-                .open_in_place(self.nonce.next()?, &self.aad, &mut self.buffer[..len])?;
+        let nonce = match self.nonce.next() {
+            Ok(nonce) => nonce,
+            Err(err) => {
+                self.errored = true;
+                return Err(err.into());
+            }
+        };
 
-        self.panicked = true;
-        let r = self.inner.write_all(plaintext);
-        self.panicked = false;
-        r
+        let plaintext =
+            match self
+                .algorithm
+                .open_in_place(nonce, &self.aad, &mut self.buffer[..len])
+            {
+                Ok(plaintext) => plaintext,
+                Err(err) => {
+                    self.errored = true;
+                    return Err(err.into());
+                }
+            };
+
+        match self.inner.write_all(plaintext) {
+            Ok(v) => Ok(v),
+            Err(err) => {
+                self.errored = true;
+                Err(err)
+            }
+        }
     }
 }
 
@@ -563,37 +568,33 @@ impl<A: Algorithm, W: Write + internal::Close> Write for DecWriter<A, W> {
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        let r: io::Result<usize> = {
-            let n = buf.len();
 
-            let remaining = self.buf_size + A::TAG_LEN - self.pos;
-            if buf.len() <= remaining {
-                self.buffer[self.pos..self.pos + buf.len()].copy_from_slice(buf);
-                self.pos += buf.len();
-                return Ok(n);
-            }
+        let n = buf.len();
+        let remaining = self.buf_size + A::TAG_LEN - self.pos;
+        if n <= remaining {
+            self.buffer[self.pos..self.pos + n].copy_from_slice(buf);
+            self.pos += n;
+            return Ok(n);
+        }
 
-            self.buffer[self.pos..].copy_from_slice(&buf[..remaining]);
-            self.write_buffer(self.buf_size + A::TAG_LEN)?;
-            self.pos = 0;
+        self.buffer[self.pos..].copy_from_slice(&buf[..remaining]);
+        self.write_buffer(self.buf_size + A::TAG_LEN)?;
+        self.pos = 0;
+        let buf = &buf[remaining..];
 
-            let buf = &buf[remaining..];
-            let chunks = buf.chunks(self.buf_size + A::TAG_LEN);
-            chunks
-                .clone()
-                .take(chunks.len() - 1) // Since we take only n-1 elements...
-                .try_for_each(|chunk| {
-                    self.buffer.copy_from_slice(chunk);
-                    self.write_buffer(self.buf_size + A::TAG_LEN)
-                })?;
-            let last = chunks.last().unwrap(); // ... there is always a last one.
-            self.buffer[..last.len()].copy_from_slice(last);
-            self.pos = last.len();
-            Ok(n)
-        };
+        let chunks = buf.chunks(self.buf_size + A::TAG_LEN);
+        chunks
+            .clone()
+            .take(chunks.len() - 1) // Since we take only n-1 elements...
+            .try_for_each(|chunk| {
+                self.buffer.copy_from_slice(chunk);
+                self.write_buffer(self.buf_size + A::TAG_LEN)
+            })?;
 
-        self.errored = r.is_err();
-        r
+        let last = chunks.last().unwrap(); // ... there is always a last one.
+        self.buffer[..last.len()].copy_from_slice(last);
+        self.pos = last.len();
+        Ok(n)
     }
 
     #[inline]
@@ -605,10 +606,7 @@ impl<A: Algorithm, W: Write + internal::Close> Write for DecWriter<A, W> {
         if self.errored {
             return Err(io::Error::from(io::ErrorKind::Other));
         }
-        self.panicked = true;
         let r = self.inner.flush();
-        self.panicked = false;
-
         self.errored = r.is_err();
         r
     }
@@ -629,31 +627,16 @@ impl<A: Algorithm, W: Write + internal::Close> internal::Close for DecWriter<A, 
 
 impl<A: Algorithm, W: Write + internal::Close> Drop for DecWriter<A, W> {
     fn drop(&mut self) {
-        // We must not check whether the DecWriter has been closed if:
-        //  - a inner write or flush call panic'd.
-        //  - we encountered an error during a write or flush call.
-        if !self.panicked && !self.errored {
-            // For debugging purposes,we allow disabling the panic
-            // for debug builds - but only if the feature "debug_panic"
-            // is turned on.
-            if !(cfg!(debug_assertions) && cfg!(feature = "debug_panic")) {
-                // Actually, Drop implementations should not panic.
-                // However, not closing the DecWriter (see: close())
-                // implies not decrypting the entire ciphertext and
-                // also not writing the entire plaintext to the inner
-                // writer. Consequently, not calling close causes not
-                // authentic (b/c incomplete) plaintext output.
-                //
-                // We could call close() here if it hasn't been called explicitly
-                // by callers but that would only succeed if the ciphertext
-                // is authentic and no other I/O error occurs. Otherwise, we
-                // are in the same situation as before. Calling close() here
-                // would be an optimistic approach - while in cryptography we have
-                // to be pessimistic.
-                assert!(
-                    self.closed,
-                    "DecWriter must be closed explicitly via the close method before being dropped!"
-                );
+        // We must not check whether the DecWriter has been closed if
+        // we encountered an error during a write or flush call.
+        if !self.errored {
+            if !self.closed {
+                // We don't want to panic again if some code (between
+                // DecWriter::new(...) and DecWriter.close()) already
+                // panic'd. Otherwise we would cause a "double-panic".
+                if !panicking() {
+                    panic!("DecWriter must be closed explicitly via the close method before being dropped!")
+                }
             }
         }
     }
