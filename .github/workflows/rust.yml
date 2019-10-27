@@ -14,11 +14,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        rust: [stable]
 
     steps:
     - uses: actions/checkout@v1
-    - name: Build on ${{ matrix.os }}
-      run: cargo build --verbose
-    - name: Test on ${{ matrix.os }}
+      with:
+        rust-version: ${{ matrix.rust }}
+    - name: Run tests
       run: cargo test --verbose
