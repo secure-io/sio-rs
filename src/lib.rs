@@ -24,13 +24,6 @@
 //!     <td>Use <a href="https://briansmith.org/rustdoc/ring/"><code>ring</code></a> to provide
 //!     default implementation of AES-256-GCM based on Google's <a href="https://github.com/google/boringssl">BoringSSL</a>
 //!     by implementing the <code>Algorithm</code> trait.
-//! <tr><td><code>debug_panic</code>
-//!     <td>This feature only affects debug builds and should only be enabled when debugging a
-//!     panic. Both, <code>EncWriter</code> and <code>DecWriter</code> must be closed explicitly.
-//!     Otherwise, dropping them causes a panic. Take a look at the <code>Close</code> trait for
-//!     more details. When this feature is enabled, dropping an <code>EncWriter</code> or
-//!     <code>DecWriter</code> without closing it explicitly does not trigger a panic in debug mode.
-//!     This may be useful when debugging a panic.
 //! </table>
 //!
 //! # Introduction
