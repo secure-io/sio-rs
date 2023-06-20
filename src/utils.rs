@@ -63,7 +63,7 @@ impl<W: Write + Close> Close for io::LineWriter<W> {
 /// // Make sure you use an unique key-nonce combination!
 /// // Reusing a nonce value for the same secret key breaks
 /// // the security of the encryption algorithm.
-/// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+/// let nonce = Nonce::new([0; Nonce::SIZE]);
 ///
 /// // You must be able to re-generate this aad to decrypt
 /// // the ciphertext again. Usually, it's stored together with

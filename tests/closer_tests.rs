@@ -5,9 +5,11 @@
 use sio::*;
 use std::{io, io::Write};
 
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(feature = "aesgcm")]
 type AEAD = AES_256_GCM;
 
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(not(feature = "aesgcm"))]
 type AEAD = CHACHA20_POLY1305;
 
@@ -35,7 +37,7 @@ fn enc_writer_missing_close() {
     let _ = EncWriter::new(
         Vec::default(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
 }
@@ -47,7 +49,7 @@ fn enc_writer_missing_close_after_write() {
     let mut writer = EncWriter::new(
         Vec::default(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     let _ = writer.write_all(b"Hello World");
@@ -56,12 +58,7 @@ fn enc_writer_missing_close_after_write() {
 #[test]
 fn enc_writer_missing_close_after_error() {
     let key: Key<AEAD> = Key::new([0; Key::<AEAD>::SIZE]);
-    let mut writer = EncWriter::new(
-        BadSink,
-        &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
-        Aad::empty(),
-    );
+    let mut writer = EncWriter::new(BadSink, &key, Nonce::new([0; Nonce::SIZE]), Aad::empty());
     let _ = writer.write_all(&[0; BUF_SIZE + 1]);
 }
 
@@ -72,7 +69,7 @@ fn enc_writer_missing_close_after_panic() {
     let _ = EncWriter::new(
         Vec::default(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     panic!();
@@ -85,7 +82,7 @@ fn dec_writer_missing_close() {
     let _ = DecWriter::new(
         Vec::default(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
 }
@@ -97,7 +94,7 @@ fn dec_writer_missing_close_after_write() {
     let mut writer = DecWriter::new(
         Vec::default(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     let _ = writer.write_all(b"Hello World");
@@ -106,12 +103,7 @@ fn dec_writer_missing_close_after_write() {
 #[test]
 fn dec_writer_missing_close_after_error() {
     let key: Key<AEAD> = Key::new([0; Key::<AEAD>::SIZE]);
-    let mut writer = DecWriter::new(
-        io::sink(),
-        &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
-        Aad::empty(),
-    );
+    let mut writer = DecWriter::new(io::sink(), &key, Nonce::new([0; Nonce::SIZE]), Aad::empty());
     let _ = writer.write_all(&[0; BUF_SIZE + AEAD::TAG_LEN + 1]);
 }
 
@@ -122,7 +114,7 @@ fn dec_writer_missing_close_after_panic() {
     let _ = DecWriter::new(
         Vec::default(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     panic!();

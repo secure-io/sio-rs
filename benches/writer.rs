@@ -10,14 +10,16 @@ use std::{io, io::Write};
 extern crate test;
 use test::Bencher;
 
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(feature = "aesgcm")]
 type AEAD = AES_256_GCM;
 
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(not(feature = "aesgcm"))]
 type AEAD = CHACHA20_POLY1305;
 
 fn buffer_size() -> usize {
-    const BUFFER_SIZE: &'static str = "SIO_BUF_SIZE";
+    const BUFFER_SIZE: &str = "SIO_BUF_SIZE";
     if let Ok(value) = std::env::var(BUFFER_SIZE) {
         let value: usize = value
             .as_str()
@@ -35,7 +37,7 @@ fn encrypt_write_1k(b: &mut Bencher) -> io::Result<()> {
     let mut writer = EncWriter::with_buffer_size(
         io::sink(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -55,7 +57,7 @@ fn encrypt_write_64k(b: &mut Bencher) -> io::Result<()> {
     let mut writer = EncWriter::with_buffer_size(
         io::sink(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -75,7 +77,7 @@ fn encrypt_write_512k(b: &mut Bencher) -> io::Result<()> {
     let mut writer = EncWriter::with_buffer_size(
         io::sink(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -95,7 +97,7 @@ fn encrypt_write_1mb(b: &mut Bencher) -> io::Result<()> {
     let mut writer = EncWriter::with_buffer_size(
         io::sink(),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -116,13 +118,13 @@ fn decrypt_write_1k(b: &mut Bencher) -> io::Result<()> {
         DecWriter::with_buffer_size(
             io::sink(),
             &key,
-            Nonce::new([0; Nonce::<AEAD>::SIZE]),
+            Nonce::new([0; Nonce::SIZE]),
             Aad::empty(),
             buffer_size(),
         )
         .expect("Failed to create DecWriter"),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -143,13 +145,13 @@ fn decrypt_write_64k(b: &mut Bencher) -> io::Result<()> {
         DecWriter::with_buffer_size(
             io::sink(),
             &key,
-            Nonce::new([0; Nonce::<AEAD>::SIZE]),
+            Nonce::new([0; Nonce::SIZE]),
             Aad::empty(),
             buffer_size(),
         )
         .expect("Failed to create DecWriter"),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -170,13 +172,13 @@ fn decrypt_write_512k(b: &mut Bencher) -> io::Result<()> {
         DecWriter::with_buffer_size(
             io::sink(),
             &key,
-            Nonce::new([0; Nonce::<AEAD>::SIZE]),
+            Nonce::new([0; Nonce::SIZE]),
             Aad::empty(),
             buffer_size(),
         )
         .expect("Failed to create DecWriter"),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )
@@ -197,13 +199,13 @@ fn decrypt_write_1mb(b: &mut Bencher) -> io::Result<()> {
         DecWriter::with_buffer_size(
             io::sink(),
             &key,
-            Nonce::new([0; Nonce::<AEAD>::SIZE]),
+            Nonce::new([0; Nonce::SIZE]),
             Aad::empty(),
             buffer_size(),
         )
         .expect("Failed to create DecWriter"),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
         buffer_size(),
     )

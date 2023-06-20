@@ -5,9 +5,11 @@
 use sio::*;
 use std::{io, io::Write};
 
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(feature = "aesgcm")]
 type AEAD = AES_256_GCM;
 
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(not(feature = "aesgcm"))]
 type AEAD = CHACHA20_POLY1305;
 
@@ -22,7 +24,7 @@ fn write() -> io::Result<()> {
     let mut writer = EncWriter::new(
         &mut ciphertext,
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     let half = data.len() / 2;
@@ -34,7 +36,7 @@ fn write() -> io::Result<()> {
     let mut writer = DecWriter::new(
         &mut plaintext,
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     let half = ciphertext.len() / 2;
@@ -58,7 +60,7 @@ fn write_empty() -> io::Result<()> {
     EncWriter::new(
         &mut ciphertext,
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     )
     .close()
@@ -68,7 +70,7 @@ fn write_empty() -> io::Result<()> {
     let mut writer = DecWriter::new(
         &mut plaintext,
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     writer
@@ -91,13 +93,13 @@ fn close() -> io::Result<()> {
             DecWriter::new(
                 &mut plaintext,
                 &key,
-                Nonce::new([0; Nonce::<AEAD>::SIZE]),
+                Nonce::new([0; Nonce::SIZE]),
                 Aad::empty(),
             )
             .closer(),
         ),
         &key,
-        Nonce::new([0; Nonce::<AEAD>::SIZE]),
+        Nonce::new([0; Nonce::SIZE]),
         Aad::empty(),
     );
     writer.write_all(&data).and_then(|_| writer.close())?;

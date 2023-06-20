@@ -2,7 +2,6 @@
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file.
 
-use super::aead::Counter;
 use super::{Aad, Algorithm, Invalid, Key, Nonce, BUF_SIZE, MAX_BUF_SIZE};
 use std::io;
 use std::io::Write;
@@ -40,7 +39,7 @@ use std::thread::panicking;
 /// // Make sure you use an unique key-nonce combination!
 /// // Reusing a nonce value for the same secret key breaks
 /// // the security of the encryption algorithm.
-/// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+/// let nonce = Nonce::new([0; Nonce::SIZE]);
 ///
 /// // You must be able to re-generate this aad to decrypt
 /// // the ciphertext again. Usually, it's stored together with
@@ -58,10 +57,9 @@ use std::thread::panicking;
 pub struct EncWriter<A: Algorithm, W: Write + internal::Close> {
     inner: W,
     algorithm: A,
-    buffer: Box<[u8]>,
+    buffer: Vec<u8>,
     pos: usize,
     buf_size: usize,
-    nonce: Counter<A>,
     aad: [u8; 16 + 1], // TODO: replace with [u8; A::TAG_LEN + 1]
 
     // If an error occurs, we must fail any subsequent write of flush operation.
@@ -96,7 +94,7 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     /// // Make sure you use an unique key-nonce combination!
     /// // Reusing a nonce value for the same secret key breaks
     /// // the security of the encryption algorithm.
-    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::SIZE]);
     ///
     /// // You must be able to re-generate this aad to decrypt
     /// // the ciphertext again. Usually, it's stored together with
@@ -111,7 +109,7 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     ///
     /// writer.close().unwrap(); // Complete the encryption process explicitly.
     /// ```
-    pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad<A>) -> Self {
+    pub fn new(inner: W, key: &Key<A>, nonce: Nonce, aad: Aad<A>) -> Self {
         Self::with_buffer_size(inner, key, nonce, aad, BUF_SIZE).unwrap()
     }
 
@@ -143,7 +141,7 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     /// // Make sure you use an unique key-nonce combination!
     /// // Reusing a nonce value for the same secret key breaks
     /// // the security of the encryption algorithm.
-    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::SIZE]);
     ///
     /// // You must be able to re-generate this aad to decrypt
     /// // the ciphertext again. Usually, it's stored together with
@@ -168,32 +166,27 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     pub fn with_buffer_size(
         inner: W,
         key: &Key<A>,
-        nonce: Nonce<A>,
+        nonce: Nonce,
         aad: Aad<A>,
         buf_size: usize,
     ) -> Result<Self, Invalid> {
         if buf_size == 0 || buf_size > MAX_BUF_SIZE {
             return Err(Invalid::BufSize);
         }
-        let algorithm = A::new(key.as_ref());
-        let mut nonce = Counter::zero(nonce);
-        let mut associated_data = [0; 1 + 16];
+        let mut algorithm = A::new(key.as_ref(), nonce);
+        let mut associated_data = Default::default();
         algorithm
-            .seal_in_place(
-                &nonce.next().unwrap(),
-                aad.as_ref(),
-                &mut associated_data[1..],
-            )
+            .seal_in_place(aad.as_ref(), &mut associated_data)
             .unwrap();
+        associated_data.insert(0, 0);
 
         Ok(EncWriter {
-            inner: inner,
-            algorithm: A::new(key.as_ref()),
-            buffer: vec![0; buf_size + A::TAG_LEN].into_boxed_slice(),
+            inner,
+            algorithm,
+            buffer: vec![0; buf_size],
             pos: 0,
-            buf_size: buf_size,
-            nonce: nonce,
-            aad: associated_data,
+            buf_size,
+            aad: associated_data.try_into().unwrap(),
             errored: false,
             closed: false,
         })
@@ -213,19 +206,8 @@ impl<A: Algorithm, W: Write + internal::Close> EncWriter<A, W> {
     /// Encrypt and authenticate the buffer and write the ciphertext
     /// to the inner writer.
     fn write_buffer(&mut self, len: usize) -> io::Result<()> {
-        let nonce = match self.nonce.next() {
-            Ok(nonce) => nonce,
-            Err(err) => {
-                self.errored = true;
-                return Err(err.into());
-            }
-        };
-
-        let ciphertext = match self.algorithm.seal_in_place(
-            nonce,
-            &self.aad,
-            &mut self.buffer[..len + A::TAG_LEN],
-        ) {
+        self.buffer.truncate(len);
+        let ciphertext = match self.algorithm.seal_in_place(&self.aad, &mut self.buffer) {
             Ok(ciphertext) => ciphertext,
             Err(err) => {
                 self.errored = true;
@@ -309,14 +291,12 @@ impl<A: Algorithm, W: Write + internal::Close> Drop for EncWriter<A, W> {
     fn drop(&mut self) {
         // We must not check whether the EncWriter has been closed if
         // we encountered an error during a write or flush call.
-        if !self.errored {
-            if !self.closed {
-                // We don't want to panic again if some code (between
-                // EncWriter::new(...) and EncWriter.close()) already
-                // panic'd. Otherwise we would cause a "double-panic".
-                if !panicking() {
-                    panic!("EncWriter must be closed explicitly via the close method before being dropped!")
-                }
+        if !self.errored && !self.closed {
+            // We don't want to panic again if some code (between
+            // EncWriter::new(...) and EncWriter.close()) already
+            // panic'd. Otherwise we would cause a "double-panic".
+            if !panicking() {
+                panic!("EncWriter must be closed explicitly via the close method before being dropped!")
             }
         }
     }
@@ -353,7 +333,7 @@ impl<A: Algorithm, W: Write + internal::Close> Drop for EncWriter<A, W> {
 /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
 ///
 /// // Use the same nonce that was used during encryption.
-/// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+/// let nonce = Nonce::new([0; Nonce::SIZE]);
 ///
 /// // Use the same associated data (AAD) that was used during encryption.
 /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
@@ -376,7 +356,6 @@ pub struct DecWriter<A: Algorithm, W: Write + internal::Close> {
     buffer: Box<[u8]>,
     pos: usize,
     buf_size: usize,
-    nonce: Counter<A>,
     aad: [u8; 16 + 1], // TODO: replace with [u8; A::TAG_LEN + 1]
 
     // If an error occurs, we must fail any subsequent write of flush operation.
@@ -409,7 +388,7 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Use the same nonce that was used during encryption.
-    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::SIZE]);
     ///
     /// // Use the same associated data (AAD) that was used during encryption.
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
@@ -428,7 +407,7 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     ///
     /// println!("{}", String::from_utf8_lossy(plaintext.as_slice())); // Let's print the plaintext.
     /// ```
-    pub fn new(inner: W, key: &Key<A>, nonce: Nonce<A>, aad: Aad<A>) -> Self {
+    pub fn new(inner: W, key: &Key<A>, nonce: Nonce, aad: Aad<A>) -> Self {
         Self::with_buffer_size(inner, key, nonce, aad, BUF_SIZE).unwrap()
     }
 
@@ -459,7 +438,7 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// let key: Key<CHACHA20_POLY1305> = Key::new([0; Key::<CHACHA20_POLY1305>::SIZE]);
     ///
     /// // Use the same nonce that was used for encryption.
-    /// let nonce = Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]);
+    /// let nonce = Nonce::new([0; Nonce::SIZE]);
     ///
     /// // Use the same associated data (AAD) that was used for encryption.
     /// let aad = Aad::from("Some authenticated but not encrypted data".as_bytes());
@@ -488,32 +467,27 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     pub fn with_buffer_size(
         inner: W,
         key: &Key<A>,
-        nonce: Nonce<A>,
+        nonce: Nonce,
         aad: Aad<A>,
         buf_size: usize,
     ) -> Result<Self, Invalid> {
         if buf_size == 0 || buf_size > MAX_BUF_SIZE {
             return Err(Invalid::BufSize);
         }
-        let algorithm = A::new(key.as_ref());
-        let mut nonce = Counter::zero(nonce);
-        let mut associated_data = [0; 1 + 16];
+        let mut algorithm = A::new(key.as_ref(), nonce);
+        let mut associated_data = Vec::with_capacity(16 + 1);
         algorithm
-            .seal_in_place(
-                &nonce.next().unwrap(),
-                aad.as_ref(),
-                &mut associated_data[1..],
-            )
+            .seal_in_place(aad.as_ref(), &mut associated_data)
             .unwrap();
+        associated_data.insert(0, 0);
 
         Ok(DecWriter {
-            inner: inner,
-            algorithm: A::new(key.as_ref()),
+            inner,
+            algorithm,
             buffer: vec![0; buf_size + A::TAG_LEN].into_boxed_slice(),
             pos: 0,
-            buf_size: buf_size,
-            nonce: nonce,
-            aad: associated_data,
+            buf_size,
+            aad: associated_data.try_into().unwrap(),
             errored: false,
             closed: false,
         })
@@ -533,25 +507,16 @@ impl<A: Algorithm, W: Write + internal::Close> DecWriter<A, W> {
     /// Decrypt and verifies the buffer and write the plaintext
     /// to the inner writer.
     fn write_buffer(&mut self, len: usize) -> io::Result<()> {
-        let nonce = match self.nonce.next() {
-            Ok(nonce) => nonce,
+        let plaintext = match self
+            .algorithm
+            .open_in_place(&self.aad, &mut self.buffer[..len])
+        {
+            Ok(plaintext) => plaintext,
             Err(err) => {
                 self.errored = true;
                 return Err(err.into());
             }
         };
-
-        let plaintext =
-            match self
-                .algorithm
-                .open_in_place(nonce, &self.aad, &mut self.buffer[..len])
-            {
-                Ok(plaintext) => plaintext,
-                Err(err) => {
-                    self.errored = true;
-                    return Err(err.into());
-                }
-            };
 
         match self.inner.write_all(plaintext) {
             Ok(v) => Ok(v),
@@ -629,14 +594,12 @@ impl<A: Algorithm, W: Write + internal::Close> Drop for DecWriter<A, W> {
     fn drop(&mut self) {
         // We must not check whether the DecWriter has been closed if
         // we encountered an error during a write or flush call.
-        if !self.errored {
-            if !self.closed {
-                // We don't want to panic again if some code (between
-                // DecWriter::new(...) and DecWriter.close()) already
-                // panic'd. Otherwise we would cause a "double-panic".
-                if !panicking() {
-                    panic!("DecWriter must be closed explicitly via the close method before being dropped!")
-                }
+        if !self.errored && !self.closed {
+            // We don't want to panic again if some code (between
+            // DecWriter::new(...) and DecWriter.close()) already
+            // panic'd. Otherwise we would cause a "double-panic".
+            if !panicking() {
+                panic!("DecWriter must be closed explicitly via the close method before being dropped!")
             }
         }
     }
@@ -697,12 +660,12 @@ mod internal {
 ///        io::BufWriter::new(EncWriter::new(
 ///            io::sink(),
 ///            &inner_key,
-///            Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]),
+///            Nonce::new([0; Nonce::SIZE]),
 ///            Aad::empty(),
 ///        ).closer() // Without this `closer` call the code would not compile.
 ///        ),
 ///        &outer_key,
-///        Nonce::new([0; Nonce::<CHACHA20_POLY1305>::SIZE]),
+///        Nonce::new([0; Nonce::SIZE]),
 ///        Aad::empty(),
 ///    );
 ///
@@ -735,7 +698,7 @@ impl<W: Write + internal::Close> Closer<W> {
     #[inline(always)]
     pub fn wrap(inner: W) -> Self {
         Self {
-            inner: inner,
+            inner,
             closed: false,
             errored: false,
         }
