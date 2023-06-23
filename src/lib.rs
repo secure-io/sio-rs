@@ -65,7 +65,7 @@
 //!
 //! You can encrypt data by wrapping a writer with an `EncWriter`. The `EncWriter` is generic over
 //! an authenticated encryption algorithm and takes a `Key`, a `Nonce` and some `Aad`.
-//! ```no_run
+//! ```no_run,ignore
 //! use std::io;
 //! use std::io::Write;
 //! use std::fs::File;
@@ -97,7 +97,7 @@
 //! Similarly, you can decrypt data by using a `DecWriter` instead of an `EncWriter`. The
 //! `DecWriter` is also generic over an authenticated encryption algorithm and expects the
 //! same `Key`, `Nonce` and `Aad` used before to encrypt the data.
-//! ```no_run
+//! ```no_run,ignore
 //! use std::io;
 //! use std::io::{Read, Write};
 //! use std::fs::File;

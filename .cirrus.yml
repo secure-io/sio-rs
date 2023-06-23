@@ -7,18 +7,18 @@ task:
           - rustup component add rustfmt
           - cargo fmt -- --check
        build_script: 
-          - cargo build --verbose --all
+          - cargo build --verbose --all-features
           
      - name: linux (nightly)
        container:
           image: rustlang/rust:nightly
        build_script:
-          - cargo build --verbose --all
-          - cargo bench --verbose --all --no-run
+          - cargo build --verbose --all-features
+          - cargo bench --verbose --all-features --no-run
      
   cargo_cache:
      folder: $CARGO_HOME/registry
   test_script: 
-          - cargo test --all
-          - cargo test --all --features=aesgcm 
+          - cargo test --features=c20p1305
+          - cargo test --features=aesgcm
   before_cache_script: rm -rf $CARGO_HOME/registry/index

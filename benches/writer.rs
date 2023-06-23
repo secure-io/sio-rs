@@ -24,7 +24,7 @@ fn buffer_size() -> usize {
         let value: usize = value
             .as_str()
             .parse()
-            .expect(format!("'{}' is not a number", BUFFER_SIZE).as_str());
+            .unwrap_or_else(|_| panic!("'{}' is not a number", BUFFER_SIZE));
         1024 * value
     } else {
         sio::BUF_SIZE
@@ -43,8 +43,9 @@ fn encrypt_write_1k(b: &mut Bencher) -> io::Result<()> {
     )
     .expect("Failed to create EncWriter");
 
+    #[allow(clippy::identity_op)]
     let buf: &[u8] = &[0; 1 * 1024];
-    b.bytes = 1 * 1024;
+    b.bytes = buf.len() as u64;
     b.iter(|| {
         writer.write_all(buf).expect("encryption failed");
     });
