@@ -89,19 +89,15 @@ pub enum Invalid {
     BufSize,
 }
 
-impl Error for Invalid {
-    fn description(&self) -> &str {
-        match self {
-            Invalid::Key => "sio::Invalid::Key",
-            Invalid::Nonce => "sio::Invalid::Nonce",
-            Invalid::BufSize => "sio::Invalid::BufSize",
-        }
-    }
-}
+impl Error for Invalid {}
 
 impl fmt::Display for Invalid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.description())
+        match self {
+            Invalid::Key => "sio::Invalid::Key".fmt(f),
+            Invalid::Nonce => "sio::Invalid::Nonce".fmt(f),
+            Invalid::BufSize => "sio::Invalid::BufSize".fmt(f),
+        }
     }
 }
 

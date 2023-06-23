@@ -4,14 +4,15 @@
 
 extern crate ring;
 
-use crate::aead::Algorithm;
+use crate::aead::{Algorithm, Counter};
 use crate::error::{Invalid, NotAuthentic};
-use ring::aead;
+use crate::Nonce;
+use ring::aead::{self, BoundKey};
 
 #[allow(non_camel_case_types)]
 pub struct AES_256_GCM {
-    seal_key: aead::SealingKey,
-    open_key: aead::OpeningKey,
+    seal_key: aead::SealingKey<Counter>,
+    open_key: aead::OpeningKey<Counter>,
 }
 
 impl Algorithm for AES_256_GCM {
@@ -19,44 +20,39 @@ impl Algorithm for AES_256_GCM {
     const NONCE_LEN: usize = 96 / 8;
     const TAG_LEN: usize = 128 / 8;
 
-    fn new(key: &[u8; Self::KEY_LEN]) -> Self {
+    fn new(key: &[u8; Self::KEY_LEN], nonce: Nonce) -> Self {
         Self {
-            seal_key: aead::SealingKey::new(&aead::AES_256_GCM, key).unwrap(),
-            open_key: aead::OpeningKey::new(&aead::AES_256_GCM, key).unwrap(),
+            seal_key: aead::SealingKey::new(
+                aead::UnboundKey::new(&aead::AES_256_GCM, key).unwrap(),
+                Counter::zero(nonce),
+            ),
+            open_key: aead::OpeningKey::new(
+                aead::UnboundKey::new(&aead::AES_256_GCM, key).unwrap(),
+                Counter::one(nonce),
+            ),
         }
     }
 
     fn seal_in_place<'a>(
-        &self,
-        nonce: &[u8; Self::NONCE_LEN],
+        &mut self,
         aad: &[u8],
-        in_out: &'a mut [u8],
+        in_out: &'a mut Vec<u8>,
     ) -> Result<&'a [u8], Invalid> {
-        match aead::seal_in_place(
-            &self.seal_key,
-            aead::Nonce::assume_unique_for_key(*nonce),
-            aead::Aad::from(aad),
-            in_out,
-            Self::TAG_LEN,
-        ) {
-            Ok(len) => Ok(&in_out[..len]),
+        match self
+            .seal_key
+            .seal_in_place_append_tag(aead::Aad::from(aad), in_out)
+        {
+            Ok(()) => Ok(in_out.as_slice()),
             Err(_) => Err(Invalid::BufSize),
         }
     }
 
     fn open_in_place<'a>(
-        &self,
-        nonce: &[u8; Self::NONCE_LEN],
+        &mut self,
         aad: &[u8],
         in_out: &'a mut [u8],
     ) -> Result<&'a [u8], NotAuthentic> {
-        match aead::open_in_place(
-            &self.open_key,
-            aead::Nonce::assume_unique_for_key(*nonce),
-            aead::Aad::from(aad),
-            0,
-            in_out,
-        ) {
+        match self.open_key.open_in_place(aead::Aad::from(aad), in_out) {
             Ok(val) => Ok(val),
             Err(_) => Err(NotAuthentic),
         }

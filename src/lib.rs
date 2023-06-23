@@ -65,7 +65,7 @@
 //!
 //! You can encrypt data by wrapping a writer with an `EncWriter`. The `EncWriter` is generic over
 //! an authenticated encryption algorithm and takes a `Key`, a `Nonce` and some `Aad`.
-//! ```norun
+//! ```no_run,ignore
 //! use std::io;
 //! use std::io::Write;
 //! use std::fs::File;
@@ -78,7 +78,7 @@
 //!     let mut f = EncWriter::new(
 //!        NopCloser::wrap(File::create("foo.txt")?),
 //!        &secret_key,
-//!        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+//!        Nonce::new([0; Nonce::SIZE]),
 //!        Aad::empty(),
 //!     );
 //!
@@ -97,7 +97,7 @@
 //! Similarly, you can decrypt data by using a `DecWriter` instead of an `EncWriter`. The
 //! `DecWriter` is also generic over an authenticated encryption algorithm and expects the
 //! same `Key`, `Nonce` and `Aad` used before to encrypt the data.
-//! ```norun
+//! ```no_run,ignore
 //! use std::io;
 //! use std::io::{Read, Write};
 //! use std::fs::File;
@@ -110,7 +110,7 @@
 //!     let mut out = DecWriter::new(
 //!        NopCloser::wrap(io::stdout()),
 //!        &secret_key,
-//!        Nonce::new([0; Nonce::<AES_256_GCM>::SIZE]),
+//!        Nonce::new([0; Nonce::SIZE]),
 //!        Aad::empty(),
 //!     );
 //!     

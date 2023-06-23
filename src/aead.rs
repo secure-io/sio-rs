@@ -2,7 +2,7 @@
 // Use of this source code is governed by a license that can be
 // found in the LICENSE file.
 
-use crate::error::{Exceeded, Invalid, NotAuthentic};
+use crate::error::{Invalid, NotAuthentic};
 use std::marker::PhantomData;
 
 pub trait Algorithm {
@@ -10,18 +10,16 @@ pub trait Algorithm {
     const NONCE_LEN: usize;
     const TAG_LEN: usize;
 
-    fn new(key: &[u8; 32]) -> Self;
+    fn new(key: &[u8; 32], nonce: Nonce) -> Self;
 
     fn seal_in_place<'a>(
-        &self,
-        nonce: &[u8; 12],
+        &mut self,
         aad: &[u8],
-        in_out: &'a mut [u8],
+        in_out: &'a mut Vec<u8>,
     ) -> Result<&'a [u8], Invalid>;
 
     fn open_in_place<'a>(
-        &self,
-        nonce: &[u8; 12],
+        &mut self,
         aad: &[u8],
         in_out: &'a mut [u8],
     ) -> Result<&'a [u8], NotAuthentic>;
@@ -43,17 +41,18 @@ impl<A: Algorithm> AsRef<[u8; 32]> for Key<A> {
     }
 }
 
-pub struct Nonce<A: Algorithm>([u8; 8], PhantomData<A>);
+#[derive(Copy, Clone)]
+pub struct Nonce([u8; 8]);
 
-impl<A: Algorithm> Nonce<A> {
-    pub const SIZE: usize = A::NONCE_LEN - 4;
+impl Nonce {
+    pub const SIZE: usize = ::ring::aead::NONCE_LEN - 4;
 
     pub fn new(bytes: [u8; 8]) -> Self {
-        Nonce(bytes, PhantomData)
+        Nonce(bytes)
     }
 }
 
-impl<A: Algorithm> AsRef<[u8; 8]> for Nonce<A> {
+impl AsRef<[u8; 8]> for Nonce {
     fn as_ref(&self) -> &[u8; 8] {
         &self.0
     }
@@ -81,7 +80,7 @@ impl<'a, A: Algorithm> Clone for Aad<'a, A> {
 impl<'a, A: Algorithm> AsRef<[u8]> for Aad<'a, A> {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        &self.0
+        self.0
     }
 }
 
@@ -92,29 +91,39 @@ impl<'a, A: Algorithm> From<&'a [u8]> for Aad<'a, A> {
     }
 }
 
-pub(crate) struct Counter<A: Algorithm> {
+pub(crate) struct Counter {
     nonce: [u8; 12],
     pub seq_num: u32,
     exceeded: bool,
-    phantom_data: PhantomData<A>,
 }
 
-impl<A: Algorithm> Counter<A> {
-    pub fn zero(nonce: Nonce<A>) -> Self {
+impl Counter {
+    fn new(nonce: Nonce, seq_num: u32) -> Self {
         let mut value = [0; 12];
-        &mut value[..8].copy_from_slice(&nonce.0);
+        value[..8].copy_from_slice(&nonce.0);
         Counter {
             nonce: value,
-            seq_num: 0,
+            seq_num,
             exceeded: false,
-            phantom_data: PhantomData,
         }
     }
 
     #[inline]
-    pub fn next<'a>(&'a mut self) -> Result<&'a [u8; 12], Exceeded> {
+    pub fn zero(nonce: Nonce) -> Self {
+        Self::new(nonce, 0)
+    }
+
+    #[inline]
+    pub fn one(nonce: Nonce) -> Self {
+        Self::new(nonce, 1)
+    }
+}
+
+impl ::ring::aead::NonceSequence for Counter {
+    #[inline]
+    fn advance(&mut self) -> Result<::ring::aead::Nonce, ::ring::error::Unspecified> {
         if self.exceeded {
-            return Err(Exceeded);
+            return Err(::ring::error::Unspecified);
         }
 
         self.nonce[8..].copy_from_slice(self.seq_num.to_le_bytes().as_ref());
@@ -123,6 +132,6 @@ impl<A: Algorithm> Counter<A> {
         } else {
             self.exceeded = true;
         }
-        Ok(&self.nonce)
+        Ok(::ring::aead::Nonce::assume_unique_for_key(self.nonce))
     }
 }

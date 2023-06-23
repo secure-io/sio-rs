@@ -1,8 +1,8 @@
 [package]
 name = "sio"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Andreas Auernhammer <aead@mail.de>"]
-edition = "2018"
+edition = "2021"
 
 description = "Secure IO"
 license = "MIT"
@@ -24,4 +24,4 @@ c20p1305 = ["ring"]
 aesgcm = ["ring"]
 
 [dependencies]
-ring = { version = "0.14.6", optional = true }
+ring = { version = "0.16", optional = true }
